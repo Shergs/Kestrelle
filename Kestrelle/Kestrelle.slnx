@@ -1,3 +1,5 @@
 <Solution>
   <Project Path="Kestrelle/Kestrelle.Api/Kestrelle.Api.csproj" />
+  <Project Path="Kestrelle/Kestrelle.Bot/Kestrelle.Bot.csproj" Id="c77ab4f8-a2ed-433c-bc3e-4cfa2e8daf94" />
+  <Project Path="Kestrelle/Kestrelle.Shared/Kestrelle.Shared.csproj" Id="7ed22629-a933-4aa2-b5db-fcaee6827b16" />
 </Solution>

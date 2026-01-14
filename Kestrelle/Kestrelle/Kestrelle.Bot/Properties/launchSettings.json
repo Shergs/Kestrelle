@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "Kestrelle.Bot": {
+      "commandName": "Project"
+    },
+    "Container (Dockerfile)": {
+      "commandName": "Docker"
+    }
+  }
+}

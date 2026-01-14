@@ -1,0 +1,27 @@
+services:
+  lavalink:
+    image: ghcr.io/lavalink-devs/lavalink:latest
+    container_name: lavalink
+    restart: unless-stopped
+    environment:
+      - SERVER_PORT=2333
+      - LAVALINK_SERVER_PASSWORD=youshallnotpass
+    volumes:
+      - ./Kestrelle/Kestrelle/Kestrelle.Lavalink/application.yml:/opt/Lavalink/application.yml:ro
+      - ./Kestrelle/Kestrelle/Kestrelle.Lavalink/plugins:/opt/Lavalink/plugins
+    ports:
+      - "2333:2333" # optional; expose only when we want to access from host
+
+  kestrelle-bot:
+    build:
+      context: .
+      dockerfile: Kestrelle/Kestrelle/Kestrelle.Bot/Dockerfile
+    image: kestrelle/kestrelle-bot:latest
+    container_name: kestrelle-bot
+    restart: unless-stopped
+    depends_on:
+      - lavalink
+    environment:
+      - Lavalink__BaseAddress=http://lavalink:2333
+      - Lavalink__WebSocketUri=ws://lavalink:2333/v4/websocket
+      - Lavalink__Passphrase=youshallnotpass
