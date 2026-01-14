@@ -1,12 +1,18 @@
 ﻿using Discord;
 using Discord.WebSocket;
-using Kestrelle.Bot.Music;
 using Kestrelle.Bot.Interactions;
+using Kestrelle.Bot.Music;
 using Lavalink4NET.Extensions;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
 var builder = Host.CreateApplicationBuilder(args);
+
+if (builder.Environment.IsDevelopment())
+{
+    builder.Configuration.AddUserSecrets<Program>(optional: true);
+}
 
 builder.Services.AddSingleton(_ =>
 {

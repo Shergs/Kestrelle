@@ -4,6 +4,7 @@ using Lavalink4NET;
 using Lavalink4NET.Players;
 using Lavalink4NET.Players.Queued;
 using Lavalink4NET.Rest.Entities.Tracks;
+using Lavalink4NET.Tracks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -73,20 +74,16 @@ public sealed class MusicModule(
     [SlashCommand("play", "Plays music", runMode: RunMode.Async)]
     public async Task Play(string query)
     {
-        logger.LogInformation($"Play invoked with query: {query}");
+        logger.LogInformation("Play invoked. Query='{Query}'", query);
+
         await DeferAsync().ConfigureAwait(false);
-        logger.LogInformation("After defer");
 
         var player = await GetPlayerAsync(connectToVoiceChannel: true).ConfigureAwait(false);
         if (player is null) return;
 
-        logger.LogInformation("Player is not null");
-
         var track = await audioService.Tracks
             .LoadTrackAsync(query, TrackSearchMode.YouTube)
             .ConfigureAwait(false);
-
-        logger.LogInformation("Track load result.");
 
         if (track is null)
         {
@@ -95,7 +92,40 @@ public sealed class MusicModule(
         }
 
         await player.PlayAsync(track).ConfigureAwait(false);
-        await FollowupAsync($"Playing: {track.Uri}").ConfigureAwait(false);
+
+        var embed = BuildNowPlayingEmbed(track, Context.User);
+
+        var components = new ComponentBuilder()
+            .WithButton("Pause/Resume", customId: $"np:toggle:{Context.Guild.Id}", style: ButtonStyle.Primary)
+            .WithButton("Skip", customId: $"np:skip:{Context.Guild.Id}", style: ButtonStyle.Secondary)
+            .WithButton("Stop", customId: $"np:stop:{Context.Guild.Id}", style: ButtonStyle.Danger)
+            .Build();
+
+        await FollowupAsync(embed: embed, components: components).ConfigureAwait(false);
+    }
+
+    private static Embed BuildNowPlayingEmbed(LavalinkTrack track, IUser requestedBy)
+    {
+        var embedBuilder = new EmbedBuilder()
+            .WithTitle("Now Playing")
+            .WithDescription($"[{track.Title}]({track.Uri})")
+            .AddField("Requested by", requestedBy.Mention, inline: true)
+            .AddField("Duration", FormatDuration(track.Duration), inline: true)
+            .WithCurrentTimestamp();
+
+        return embedBuilder.Build();
+    }
+
+    private static string FormatDuration(TimeSpan duration)
+    {
+        if (duration == TimeSpan.Zero)
+        { 
+            return "Live";
+        }
+
+        return duration.TotalHours >= 1
+            ? $"{(int)duration.TotalHours}:{duration.Minutes:D2}:{duration.Seconds:D2}"
+            : $"{duration.Minutes}:{duration.Seconds:D2}";
     }
 
     [SlashCommand("pause", "Pauses the player", runMode: RunMode.Async)]
@@ -182,7 +212,6 @@ public sealed class MusicModule(
         var player = await GetPlayerAsync(connectToVoiceChannel: false).ConfigureAwait(false);
         if (player is null) return;
 
-        // Default player documents StopAsync(disconnect: true). :contentReference[oaicite:9]{index=9}
         await player.StopAsync().ConfigureAwait(false);
         await FollowupAsync("Disconnected.").ConfigureAwait(false);
     }

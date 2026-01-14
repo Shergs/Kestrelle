@@ -25,3 +25,4 @@ services:
       - Lavalink__BaseAddress=http://lavalink:2333
       - Lavalink__WebSocketUri=ws://lavalink:2333/v4/websocket
       - Lavalink__Passphrase=youshallnotpass
+      - Discord__Token=${DISCORD_TOKEN}
