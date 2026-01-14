@@ -1,4 +1,16 @@
 services:
+  db:
+    image: postgres:16
+    container_name: kestrelle-db
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - kestrelle_pgdata:/var/lib/postgresql/data
+
   lavalink:
     image: ghcr.io/lavalink-devs/lavalink:latest
     container_name: lavalink
@@ -26,3 +38,7 @@ services:
       - Lavalink__WebSocketUri=ws://lavalink:2333/v4/websocket
       - Lavalink__Passphrase=youshallnotpass
       - Discord__Token=${DISCORD_TOKEN}
+      - ConnectionStrings__KestrelleDb=${ConnectionStrings_KestrelleDb}
+      
+volumes:
+  kestrelle_pgdata:

@@ -1,5 +1,6 @@
 ﻿using Discord;
 using Discord.WebSocket;
+using Kestrelle.Models.Data;
 using Kestrelle.Bot.Interactions;
 using Kestrelle.Bot.Music;
 using Lavalink4NET.Extensions;
@@ -23,6 +24,8 @@ builder.Services.AddSingleton(_ =>
 
     return new DiscordSocketClient(config);
 });
+
+builder.Services.AddKestrelleData(builder.Configuration);
 
 builder.Services.AddSingleton<InteractionServiceAdapter>();
 builder.Services.AddSingleton<InteractionHandler>();
