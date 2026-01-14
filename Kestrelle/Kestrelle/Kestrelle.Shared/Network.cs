@@ -1,6 +1,6 @@
 ﻿using System.Net.Sockets;
 
-namespace Kestrelle.Shared.Util;
+namespace Kestrelle.Shared;
 
 public class Network
 {

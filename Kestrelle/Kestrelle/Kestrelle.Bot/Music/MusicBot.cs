@@ -1,7 +1,7 @@
 ﻿using Discord;
 using Discord.WebSocket;
 using Kestrelle.Bot.Interactions;
-using Kestrelle.Shared.Util;
+using Kestrelle.Shared;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
