@@ -41,6 +41,7 @@ builder.Services.ConfigureLavalink(options =>
 });
 
 builder.Services.AddHostedService<MusicBot>();
+builder.Services.AddHostedService<SoundBot>();
 
 var host = builder.Build();
 await host.RunAsync();
