@@ -10,6 +10,7 @@ public sealed class KestrelleDbContext : DbContext
     public DbSet<DiscordGuild> Guilds => Set<DiscordGuild>();
     public DbSet<DiscordUser> Users => Set<DiscordUser>();
     public DbSet<Sound> Sounds => Set<Sound>();
+    public DbSet<DiscordOAuthToken> DiscordOAuthTokens => Set<DiscordOAuthToken>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -44,6 +45,14 @@ public sealed class KestrelleDbContext : DbContext
             e.HasOne(x => x.UploadedByUser)
                 .WithMany(x => x.UploadedSounds)
                 .HasForeignKey(x => x.UploadedByUserId);
+        });
+
+        modelBuilder.Entity<DiscordOAuthToken>(b =>
+        {
+            b.HasKey(x => x.DiscordUserId);
+            b.Property(x => x.AccessToken).IsRequired();
+            b.Property(x => x.RefreshToken).IsRequired();
+            b.Property(x => x.ExpiresAtUtc).IsRequired();
         });
     }
 }
