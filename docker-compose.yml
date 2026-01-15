@@ -40,5 +40,29 @@ services:
       - Discord__Token=${DISCORD_TOKEN}
       - ConnectionStrings__KestrelleDb=${ConnectionStrings_KestrelleDb}
       
+  kestrelle-api:
+    build:
+      context: .
+      dockerfile: Kestrelle/Kestrelle/Kestrelle.Api/Dockerfile
+    image: kestrelle/kestrelle-api:latest
+    container_name: kestrelle-api
+    restart: unless-stopped
+    ports:
+      - "8081:8080"
+    expose:
+      - "8080"
+
+  kestrelle-client:
+    build:
+      context: .
+      dockerfile: Kestrelle/Kestrelle/Kestrelle.Client/Dockerfile
+    image: kestrelle/kestrelle-client:latest
+    container_name: kestrelle-client
+    restart: unless-stopped
+    depends_on:
+      - kestrelle-api
+    ports:
+      - "8080:80"
+      
 volumes:
   kestrelle_pgdata:

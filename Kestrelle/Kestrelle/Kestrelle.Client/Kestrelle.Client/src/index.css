@@ -1,0 +1,10 @@
+@import "tailwindcss";
+
+/* Optional: small defaults that feel good in dashboards */
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+}

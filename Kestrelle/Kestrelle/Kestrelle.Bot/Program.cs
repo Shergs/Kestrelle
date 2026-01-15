@@ -3,6 +3,7 @@ using Discord.WebSocket;
 using Kestrelle.Models.Data;
 using Kestrelle.Bot.Interactions;
 using Kestrelle.Bot.Music;
+using Kestrelle.Bot.Sounds;
 using Lavalink4NET.Extensions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
