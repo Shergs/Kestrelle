@@ -57,7 +57,6 @@ services:
     expose:
       - "8080"
 
-
   kestrelle-client:
     build:
       context: .
