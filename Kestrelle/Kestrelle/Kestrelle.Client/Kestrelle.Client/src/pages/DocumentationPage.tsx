@@ -1,34 +1,41 @@
 export function DocumentationPage() {
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold">Documentation</h2>
-        <p className="mt-1 text-sm text-slate-400">
-          Operator notes and developer docs for Kestrelle.
-        </p>
+        <h2 className="text-2xl font-semibold text-slate-100">Documentation</h2>
+        <p className="mt-1 text-sm text-slate-400">Kestrelle bot commands and product notes.</p>
       </div>
 
-      <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-5">
-        <div className="text-sm font-semibold">Local URLs</div>
-        <div className="mt-2 space-y-2 text-sm text-slate-300">
-          <div>
-            UI: <span className="font-mono text-slate-200">http://localhost:8080</span>
-          </div>
-          <div>
-            API Status (via proxy):{" "}
-            <span className="font-mono text-slate-200">http://localhost:8080/api/status</span>
-          </div>
+      <div className="rounded-3xl border border-slate-800 bg-slate-950/40 p-6">
+        <div className="text-base font-semibold text-slate-100">Music Commands</div>
+        <div className="mt-1 text-sm text-slate-400">Slash commands for live music control.</div>
+
+        <div className="mt-4 grid gap-3 lg:grid-cols-2">
+          {[
+            { cmd: "/play <query>", desc: "Searches YouTube and starts playback." },
+            { cmd: "/pause", desc: "Pauses the current track." },
+            { cmd: "/resume", desc: "Resumes playback." },
+            { cmd: "/skip", desc: "Skips the current track." },
+            { cmd: "/stop", desc: "Stops playback and clears the queue." },
+            { cmd: "/leave", desc: "Disconnects the bot from voice." },
+          ].map((c) => (
+            <div
+              key={c.cmd}
+              className="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-950/50 px-4 py-3"
+            >
+              <div className="text-sm font-semibold text-slate-100">{c.cmd}</div>
+              <div className="text-xs text-slate-400">{c.desc}</div>
+            </div>
+          ))}
         </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-5">
-        <div className="text-sm font-semibold">Auth roadmap</div>
-        <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-slate-400">
-          <li>Implement Discord OAuth start/callback in API.</li>
-          <li>Set secure session cookie (or JWT) on success.</li>
-          <li>Expose `/api/me` and `/api/guilds` for UI.</li>
-          <li>Add SignalR for live queue/now-playing.</li>
-        </ol>
+      <div className="rounded-3xl border border-slate-800 bg-slate-950/40 p-6">
+        <div className="text-base font-semibold text-slate-100">Sounds</div>
+        <div className="mt-2 rounded-2xl border border-slate-800 bg-slate-950/60 p-6 text-sm text-slate-300 blur-[2px]">
+          Soundboard clips, intro stingers, and reaction moments — coming soon.
+        </div>
+        <div className="mt-2 text-xs text-slate-500">Coming soon</div>
       </div>
     </div>
   );

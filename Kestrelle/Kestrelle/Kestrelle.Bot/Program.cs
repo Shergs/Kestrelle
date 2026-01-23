@@ -8,6 +8,7 @@ using Lavalink4NET.Extensions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Kestrelle.Bot.Realtime;
 
 var builder = Host.CreateApplicationBuilder(args);
 
@@ -31,6 +32,8 @@ builder.Services.AddKestrelleData(builder.Configuration);
 builder.Services.AddSingleton<InteractionServiceAdapter>();
 builder.Services.AddSingleton<InteractionHandler>();
 
+builder.Services.AddSingleton<MusicRealtimePublisher>();
+
 builder.Services.AddLavalink();
 
 builder.Services.ConfigureLavalink(options =>
@@ -43,6 +46,20 @@ builder.Services.ConfigureLavalink(options =>
 
 builder.Services.AddHostedService<MusicBot>();
 builder.Services.AddHostedService<SoundBot>();
+builder.Services.AddHostedService<MusicControlSubscriber>();
+
+builder.Services.AddHttpClient<MusicRealtimePublisher>((sp, client) =>
+{
+    var cfg = sp.GetRequiredService<IConfiguration>();
+    var baseUrl = cfg["KestrelleApi:BaseAddress"];
+
+    if (string.IsNullOrWhiteSpace(baseUrl))
+        throw new InvalidOperationException("KestrelleApi:BaseAddress is missing.");
+
+    client.BaseAddress = new Uri(baseUrl, UriKind.Absolute);
+    client.Timeout = TimeSpan.FromSeconds(5);
+});
+
 
 var host = builder.Build();
 await host.RunAsync();

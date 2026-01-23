@@ -39,6 +39,8 @@ services:
       - Lavalink__Passphrase=youshallnotpass
       - Discord__Token=${DISCORD_TOKEN}
       - ConnectionStrings__KestrelleDb=${ConnectionStrings_KestrelleDb}
+      - Kestrelle__BotApiKey=${KESTRELLE_BOT_API_KEY}
+      - KestrelleApi__BaseAddress=${KESTRELLE_API_BASE_ADDRESS}
       
   kestrelle-api:
     build:
@@ -54,6 +56,7 @@ services:
       - Discord__Token=${DISCORD_TOKEN}
       - ConnectionStrings__KestrelleDb=${ConnectionStrings_KestrelleDb}
       - ASPNETCORE_URLS=http://+:8080
+      - Kestrelle__BotApiKey=${KESTRELLE_BOT_API_KEY}
     expose:
       - "8080"
 

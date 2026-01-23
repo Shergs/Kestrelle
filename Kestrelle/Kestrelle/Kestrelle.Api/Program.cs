@@ -1,8 +1,9 @@
 using Kestrelle.Api.Auth;
 using Kestrelle.Api.Discord;
 using Kestrelle.Api.Discord.Guilds;
+using Kestrelle.Api.Hubs;
+using Kestrelle.Api.Music;
 using Kestrelle.Api.Status;
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.HttpOverrides;
 
@@ -20,16 +21,21 @@ builder.Services
         options.Cookie.Name = "kestrelle_auth";
         options.Cookie.HttpOnly = true;
         options.Cookie.SameSite = SameSiteMode.Lax;
-
-        // Local dev behind http://localhost:8080
         options.Cookie.SecurePolicy = CookieSecurePolicy.None;
     })
     .AddDiscordOAuth(builder.Configuration);
 
 builder.Services.AddAuthorization();
 
-// Used by the Discord slice(s)
 builder.Services.AddHttpClient();
+builder.Services.AddHttpClient<DiscordApiClient>(client =>
+{
+    client.BaseAddress = new Uri("https://discord.com/api/");
+});
+
+builder.Services.AddSignalR();
+
+builder.Services.AddSingleton<MusicStateStore>();
 
 builder.Services.Configure<ForwardedHeadersOptions>(o =>
 {
@@ -41,11 +47,6 @@ builder.Services.Configure<ForwardedHeadersOptions>(o =>
     o.KnownProxies.Clear();
 });
 
-builder.Services.AddHttpClient<DiscordApiClient>(client =>
-{
-    client.BaseAddress = new Uri("https://discord.com/api/");
-});
-
 var app = builder.Build();
 
 app.UseForwardedHeaders();
@@ -54,10 +55,17 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 var api = app.MapGroup("/api");
-api.MapGetVoiceChannels();
 
 GetStatus.Map(api);
 DiscordAuthEndpoints.Map(api);
 GetAvailableGuilds.Map(api);
+MusicEndpoints.Map(api);
+MusicRealtimeIngestEndpoints.Map(api);
+MusicControlEndpoints.Map(api);
+
+api.MapGetVoiceChannels();
+
+app.MapHub<MusicHub>("/hubs/music");
+app.MapHub<MusicControlHub>("/hubs/music-control");
 
 app.Run();

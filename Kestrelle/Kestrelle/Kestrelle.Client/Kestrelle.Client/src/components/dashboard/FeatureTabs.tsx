@@ -55,7 +55,6 @@ export function FeatureTabs({
 }) {
   return (
     <div className="min-w-[360px]">
-      <div className="text-xs font-medium text-slate-400">Feature</div>
       <div className="mt-1 flex gap-2 rounded-3xl border border-slate-800 bg-slate-900/40 p-2">
         <TabButton
           active={value === "music"}

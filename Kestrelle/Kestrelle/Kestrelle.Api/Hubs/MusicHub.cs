@@ -6,11 +6,11 @@ namespace Kestrelle.Api.Hubs;
 [Authorize]
 public sealed class MusicHub : Hub
 {
-    public static string GroupName(ulong guildId) => $"guild:{guildId}";
+    public static string GroupName(string guildId) => $"guild:{guildId}";
 
-    public Task JoinGuild(ulong guildId) =>
+    public Task JoinGuild(string guildId) =>
         Groups.AddToGroupAsync(Context.ConnectionId, GroupName(guildId));
 
-    public Task LeaveGuild(ulong guildId) =>
+    public Task LeaveGuild(string guildId) =>
         Groups.RemoveFromGroupAsync(Context.ConnectionId, GroupName(guildId));
 }

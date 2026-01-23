@@ -9,9 +9,11 @@ export function TopBar() {
   return (
     <header className="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-900/40 px-4 py-3">
       <Link to="/overview" className="flex items-center gap-3">
-        <div className="grid h-9 w-9 place-items-center rounded-xl bg-indigo-500/15 text-indigo-200 ring-1 ring-indigo-500/30">
-          K
-        </div>
+        <img
+          src="/Kestrelle_Transparent.png"
+          alt="Kestrelle"
+          className="h-9 w-9 rounded-xl object-contain ring-1 ring-indigo-500/30"
+        />
         <div>
           <div className="text-sm font-semibold leading-4">Kestrelle</div>
           <div className="text-xs text-slate-400">Modern control plane</div>

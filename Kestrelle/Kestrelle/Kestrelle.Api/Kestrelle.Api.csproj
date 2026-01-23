@@ -15,6 +15,7 @@
 
   <ItemGroup>
 	<ProjectReference Include="../Kestrelle.Models/Kestrelle.Models.csproj" />
+	<ProjectReference Include="../Kestrelle.Shared/Kestrelle.Shared.csproj" />
   </ItemGroup>
 	
 </Project>

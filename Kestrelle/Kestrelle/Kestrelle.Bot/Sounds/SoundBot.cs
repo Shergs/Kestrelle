@@ -16,44 +16,44 @@ internal sealed class SoundBot(
 {
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        await Network.WaitForPortAsync("lavalink", 2333, TimeSpan.FromSeconds(60));
+        //await Network.WaitForPortAsync("lavalink", 2333, TimeSpan.FromSeconds(60));
 
-        client.Log += msg =>
-        {
-            logger.Log(
-                msg.Severity switch
-                {
-                    LogSeverity.Critical => LogLevel.Critical,
-                    LogSeverity.Error => LogLevel.Error,
-                    LogSeverity.Warning => LogLevel.Warning,
-                    LogSeverity.Info => LogLevel.Information,
-                    LogSeverity.Verbose => LogLevel.Debug,
-                    LogSeverity.Debug => LogLevel.Debug,
-                    _ => LogLevel.Information
-                },
-                msg.Exception,
-                "{Message}", msg.Message);
+        //client.Log += msg =>
+        //{
+        //    logger.Log(
+        //        msg.Severity switch
+        //        {
+        //            LogSeverity.Critical => LogLevel.Critical,
+        //            LogSeverity.Error => LogLevel.Error,
+        //            LogSeverity.Warning => LogLevel.Warning,
+        //            LogSeverity.Info => LogLevel.Information,
+        //            LogSeverity.Verbose => LogLevel.Debug,
+        //            LogSeverity.Debug => LogLevel.Debug,
+        //            _ => LogLevel.Information
+        //        },
+        //        msg.Exception,
+        //        "{Message}", msg.Message);
 
-            return Task.CompletedTask;
-        };
+        //    return Task.CompletedTask;
+        //};
 
-        await interactionHandler.InitializeAsync();
+        //await interactionHandler.InitializeAsync();
 
-        var token = config["Discord:Token"];
-        if (string.IsNullOrWhiteSpace(token))
-        {
-            throw new InvalidOperationException("Discord:Token is missing from configuration.");
-        }
+        //var token = config["Discord:Token"];
+        //if (string.IsNullOrWhiteSpace(token))
+        //{
+        //    throw new InvalidOperationException("Discord:Token is missing from configuration.");
+        //}
 
-        await client.LoginAsync(TokenType.Bot, token);
-        await client.StartAsync();
+        //await client.LoginAsync(TokenType.Bot, token);
+        //await client.StartAsync();
 
-        logger.LogInformation("Bot started.");
+        //logger.LogInformation("Bot started.");
     }
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        await client.StopAsync();
-        await client.LogoutAsync();
+        //await client.StopAsync();
+        //await client.LogoutAsync();
     }
 }

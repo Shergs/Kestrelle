@@ -1,5 +1,6 @@
 ﻿using Discord;
 using Discord.Interactions;
+using Kestrelle.Bot.Realtime; // <-- MusicRealtimePublisher namespace
 using Lavalink4NET;
 using Lavalink4NET.Players;
 using Lavalink4NET.Players.Queued;
@@ -7,11 +8,13 @@ using Lavalink4NET.Rest.Entities.Tracks;
 using Lavalink4NET.Tracks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Linq;
 
 public sealed class MusicModule(
     IAudioService audioService,
     IOptions<QueuedLavalinkPlayerOptions> playerOptions,
-    ILogger<MusicModule> logger
+    ILogger<MusicModule> logger,
+    MusicRealtimePublisher realtimePublisher
     ) : InteractionModuleBase<SocketInteractionContext>
 {
     private async ValueTask<QueuedLavalinkPlayer?> GetPlayerAsync(bool connectToVoiceChannel = true)
@@ -71,6 +74,83 @@ public sealed class MusicModule(
         return result.Player;
     }
 
+    // ----------------------------
+    // Realtime publishing helpers
+    // ----------------------------
+
+    private string GuildIdString => Context.Guild?.Id.ToString() ?? "0";
+
+    private static object TrackSummary(LavalinkTrack t, IUser requestedBy)
+        => new
+        {
+            title = t.Title,
+            author = t.Author,
+            uri = t.Uri?.ToString(),
+            durationMs = (long)t.Duration.TotalMilliseconds,
+            artworkUrl = (string?)null, // add if you can derive thumbnails later
+            requestedBy = requestedBy.Username
+        };
+
+    private async Task PublishNowPlayingAsync(QueuedLavalinkPlayer player, LavalinkTrack? track, bool isPaused)
+    {
+        var positionMs = GetPlayerPositionMs(player);
+        var volume = GetPlayerVolume(player) ?? 100;
+        // Position can be improved later via events; start with 0 or keep last-known.
+        var payload = new
+        {
+            guildId = GuildIdString,
+            track = track is null ? null : TrackSummary(track, Context.User),
+            positionMs = positionMs,
+            isPaused = isPaused,
+            volume = volume,
+            updatedUtc = DateTimeOffset.UtcNow
+        };
+
+        await realtimePublisher.PublishNowPlayingAsync(payload, CancellationToken.None).ConfigureAwait(false);
+    }
+
+    private async Task PublishQueueAsync(QueuedLavalinkPlayer player)
+    {
+        var tracks = player.Queue
+            .Select(queueItem => new
+            {
+                title = queueItem.Track.Title,
+                author = queueItem.Track.Author,
+                uri = queueItem.Track.Uri,
+                durationMs = (long)queueItem.Track.Duration.TotalMilliseconds,
+                artworkUrl = (string?)null,
+                requestedBy = (string?)null
+            })
+            .ToList();
+
+        var payload = new
+        {
+            guildId = GuildIdString,
+            tracks = tracks,
+            updatedUtc = DateTimeOffset.UtcNow
+        };
+
+        await realtimePublisher.PublishQueueAsync(payload, CancellationToken.None).ConfigureAwait(false);
+    }
+
+    private async Task PublishToastAsync(string kind, string message)
+    {
+        var payload = new
+        {
+            guildId = GuildIdString,
+            kind = kind,
+            message = message,
+            user = Context.User.Username,
+            occurredUtc = DateTimeOffset.UtcNow
+        };
+
+        await realtimePublisher.PublishToastAsync(payload, CancellationToken.None).ConfigureAwait(false);
+    }
+
+    // ----------------------------
+    // Commands
+    // ----------------------------
+
     [SlashCommand("play", "Plays music", runMode: RunMode.Async)]
     public async Task Play(string query)
     {
@@ -88,44 +168,26 @@ public sealed class MusicModule(
         if (track is null)
         {
             await FollowupAsync("No results.").ConfigureAwait(false);
+            await PublishToastAsync("warning", "No results found.").ConfigureAwait(false);
             return;
         }
 
         await player.PlayAsync(track).ConfigureAwait(false);
 
+        // Publish realtime state + toast
+        await PublishToastAsync("success", $"Now playing: {track.Title}").ConfigureAwait(false);
+        await PublishNowPlayingAsync(player, track, isPaused: false).ConfigureAwait(false);
+        await PublishQueueAsync(player).ConfigureAwait(false);
+
         var embed = BuildNowPlayingEmbed(track, Context.User);
 
         var components = new ComponentBuilder()
-            .WithButton("Pause/Resume", customId: $"np:toggle:{Context.Guild.Id}", style: ButtonStyle.Primary)
-            .WithButton("Skip", customId: $"np:skip:{Context.Guild.Id}", style: ButtonStyle.Secondary)
-            .WithButton("Stop", customId: $"np:stop:{Context.Guild.Id}", style: ButtonStyle.Danger)
+            .WithButton("Pause/Resume", customId: $"np:toggle:{Context.Guild!.Id}", style: ButtonStyle.Primary)
+            .WithButton("Skip", customId: $"np:skip:{Context.Guild!.Id}", style: ButtonStyle.Secondary)
+            .WithButton("Stop", customId: $"np:stop:{Context.Guild!.Id}", style: ButtonStyle.Danger)
             .Build();
 
         await FollowupAsync(embed: embed, components: components).ConfigureAwait(false);
-    }
-
-    private static Embed BuildNowPlayingEmbed(LavalinkTrack track, IUser requestedBy)
-    {
-        var embedBuilder = new EmbedBuilder()
-            .WithTitle("Now Playing")
-            .WithDescription($"[{track.Title}]({track.Uri})")
-            .AddField("Requested by", requestedBy.Mention, inline: true)
-            .AddField("Duration", FormatDuration(track.Duration), inline: true)
-            .WithCurrentTimestamp();
-
-        return embedBuilder.Build();
-    }
-
-    private static string FormatDuration(TimeSpan duration)
-    {
-        if (duration == TimeSpan.Zero)
-        { 
-            return "Live";
-        }
-
-        return duration.TotalHours >= 1
-            ? $"{(int)duration.TotalHours}:{duration.Minutes:D2}:{duration.Seconds:D2}"
-            : $"{duration.Minutes}:{duration.Seconds:D2}";
     }
 
     [SlashCommand("pause", "Pauses the player", runMode: RunMode.Async)]
@@ -143,6 +205,10 @@ public sealed class MusicModule(
         }
 
         await player.PauseAsync().ConfigureAwait(false);
+
+        await PublishToastAsync("info", "Paused playback.").ConfigureAwait(false);
+        await PublishNowPlayingAsync(player, player.CurrentTrack, isPaused: true).ConfigureAwait(false);
+
         await FollowupAsync("Paused.").ConfigureAwait(false);
     }
 
@@ -161,6 +227,10 @@ public sealed class MusicModule(
         }
 
         await player.ResumeAsync().ConfigureAwait(false);
+
+        await PublishToastAsync("info", "Resumed playback.").ConfigureAwait(false);
+        await PublishNowPlayingAsync(player, player.CurrentTrack, isPaused: false).ConfigureAwait(false);
+
         await FollowupAsync("Resumed.").ConfigureAwait(false);
     }
 
@@ -180,7 +250,22 @@ public sealed class MusicModule(
 
         await player.SkipAsync().ConfigureAwait(false);
 
+        // After skip, current track may be next track or null
         var track = player.CurrentTrack;
+
+        if (track is not null)
+        {
+            await PublishToastAsync("info", $"Skipped. Now playing: {track.Title}").ConfigureAwait(false);
+            await PublishNowPlayingAsync(player, track, isPaused: player.State is PlayerState.Paused).ConfigureAwait(false);
+        }
+        else
+        {
+            await PublishToastAsync("info", "Skipped. Queue is empty; playback stopped.").ConfigureAwait(false);
+            await PublishNowPlayingAsync(player, null, isPaused: false).ConfigureAwait(false);
+        }
+
+        await PublishQueueAsync(player).ConfigureAwait(false);
+
         await FollowupAsync(track is not null
             ? $"Skipped. Now playing: {track.Uri}"
             : "Skipped. Stopped playing because the queue is now empty.").ConfigureAwait(false);
@@ -201,6 +286,11 @@ public sealed class MusicModule(
         }
 
         await player.StopAsync().ConfigureAwait(false);
+
+        await PublishToastAsync("warning", "Stopped playback.").ConfigureAwait(false);
+        await PublishNowPlayingAsync(player, null, isPaused: false).ConfigureAwait(false);
+        await PublishQueueAsync(player).ConfigureAwait(false);
+
         await FollowupAsync("Stopped playing.").ConfigureAwait(false);
     }
 
@@ -213,6 +303,93 @@ public sealed class MusicModule(
         if (player is null) return;
 
         await player.StopAsync().ConfigureAwait(false);
+
+        await PublishToastAsync("warning", "Disconnected from voice.").ConfigureAwait(false);
+        await PublishNowPlayingAsync(player, null, isPaused: false).ConfigureAwait(false);
+        await PublishQueueAsync(player).ConfigureAwait(false);
+
         await FollowupAsync("Disconnected.").ConfigureAwait(false);
+    }
+
+    private static Embed BuildNowPlayingEmbed(LavalinkTrack track, IUser requestedBy)
+    {
+        var embedBuilder = new EmbedBuilder()
+            .WithTitle("Now Playing")
+            .WithDescription($"[{track.Title}]({track.Uri})")
+            .AddField("Requested by", requestedBy.Mention, inline: true)
+            .AddField("Duration", FormatDuration(track.Duration), inline: true)
+            .WithCurrentTimestamp();
+
+        return embedBuilder.Build();
+    }
+
+    private static string FormatDuration(TimeSpan duration)
+    {
+        if (duration == TimeSpan.Zero)
+        {
+            return "Live";
+        }
+
+        return duration.TotalHours >= 1
+            ? $"{(int)duration.TotalHours}:{duration.Minutes:D2}:{duration.Seconds:D2}"
+            : $"{duration.Minutes}:{duration.Seconds:D2}";
+    }
+
+    private static long GetPlayerPositionMs(QueuedLavalinkPlayer player)
+    {
+        var type = player.GetType();
+
+        var posProp = type.GetProperty("Position");
+        if (posProp?.GetValue(player) is TimeSpan ts)
+            return (long)ts.TotalMilliseconds;
+
+        var currentPosProp = type.GetProperty("CurrentPosition");
+        if (currentPosProp?.GetValue(player) is TimeSpan ts1)
+            return (long)ts1.TotalMilliseconds;
+
+        var playbackPosProp = type.GetProperty("PlaybackPosition");
+        if (playbackPosProp?.GetValue(player) is TimeSpan ts2)
+            return (long)ts2.TotalMilliseconds;
+
+        var trackPosProp = type.GetProperty("TrackPosition");
+        if (trackPosProp?.GetValue(player) is TimeSpan ts3)
+            return (long)ts3.TotalMilliseconds;
+
+        var positionMsProp = type.GetProperty("PositionMilliseconds");
+        if (positionMsProp?.GetValue(player) is long ms)
+            return ms;
+
+        return 0L;
+    }
+
+    private static int? GetPlayerVolume(QueuedLavalinkPlayer player)
+    {
+        var volProp = player.GetType().GetProperty("Volume");
+        if (volProp?.GetValue(player) is int volume)
+            return NormalizeIntVolume(volume);
+
+        if (volProp?.GetValue(player) is float f)
+            return NormalizeVolume(f);
+
+        if (volProp?.GetValue(player) is double d)
+            return NormalizeVolume(d);
+
+        return null;
+    }
+
+    private static int NormalizeVolume(double value)
+    {
+        if (value <= 1.0)
+            return (int)Math.Round(value * 100);
+
+        return (int)Math.Round(value);
+    }
+
+    private static int NormalizeIntVolume(int value)
+    {
+        if (value > 100)
+            return (int)Math.Round(value / 10d);
+
+        return value;
     }
 }

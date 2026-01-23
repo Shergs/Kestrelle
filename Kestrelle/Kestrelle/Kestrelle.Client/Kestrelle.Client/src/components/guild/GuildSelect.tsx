@@ -18,8 +18,7 @@ export function GuildSelect() {
 
   return (
     <div className="relative min-w-[320px]">
-      <div className="flex items-center justify-between">
-        <div className="text-xs font-medium text-slate-400">Server</div>
+      <div className="flex items-center justify-end">
         {!selectedGuildId && (
           <span className="rounded-full border border-slate-800 bg-slate-950/60 px-2 py-0.5 text-[11px] text-slate-400">
             Required

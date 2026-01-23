@@ -19,14 +19,26 @@ export function ActiveServerChip() {
   if (!selected) return null;
 
   return (
-    <div className="inline-flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-950/40 px-3 py-2">
-      <div
-        className="h-10 w-10 rounded-xl ring-1 ring-slate-800"
-        style={placeholderGradient(selected.id)}
-        aria-hidden
-      />
-      <div className="min-w-0">
-        <div className="truncate text-sm font-semibold text-slate-100">{selected.name}</div>
+    <div className="inline-flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-950/40 px-3 py-2 shadow-sm shadow-slate-950/40">
+      {selected.iconUrl ? (
+        <img
+          src={selected.iconUrl}
+          alt=""
+          className="h-10 w-10 rounded-xl object-cover ring-1 ring-slate-800"
+        />
+      ) : (
+        <div
+          className="h-10 w-10 rounded-xl ring-1 ring-slate-800"
+          style={placeholderGradient(selected.id)}
+          aria-hidden
+        />
+      )}
+      <div className="min-w-0 max-w-[320px]">
+        <div className="overflow-hidden text-sm font-semibold text-slate-100">
+          <div className={`kestrelle-marquee${selected.name.length > 18 ? " is-scroll" : ""}`}>
+            <span>{selected.name}</span>
+          </div>
+        </div>
         <div className="truncate text-xs text-slate-400">Active server</div>
       </div>
       <div className="ml-2 hidden rounded-xl border border-slate-800 bg-slate-950/60 px-2 py-1 text-[11px] text-slate-400 sm:block">
