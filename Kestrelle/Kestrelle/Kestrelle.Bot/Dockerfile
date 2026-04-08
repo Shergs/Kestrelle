@@ -8,7 +8,9 @@ WORKDIR /tmp/libdave/cpp
 RUN git submodule update --init --recursive \
     && ./vcpkg/bootstrap-vcpkg.sh \
     && make cclean \
-    && make install BUILD_SHARED_LIBS=ON
+    && make shared \
+    && mkdir -p /tmp/libdave-out \
+    && cp "$(find build -name 'libdave.so*' | head -n 1)" /tmp/libdave-out/libdave.so
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
@@ -22,8 +24,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /app/publish .
-COPY --from=libdave-build /tmp/libdave/cpp/build/install/lib/ /usr/local/lib/
-RUN cp -a /usr/local/lib/libdave.so* /app/ 2>/dev/null || true \
+COPY --from=libdave-build /tmp/libdave-out/libdave.so /usr/local/lib/libdave.so
+RUN cp -a /usr/local/lib/libdave.so /app/libdave.so \
     && ldconfig
 ENV LD_LIBRARY_PATH=/usr/local/lib:/app
 ENV DOTNET_EnableDiagnostics=0
