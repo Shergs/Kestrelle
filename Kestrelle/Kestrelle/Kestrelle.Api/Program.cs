@@ -61,6 +61,7 @@ var app = builder.Build();
 await using (var scope = app.Services.CreateAsyncScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<KestrelleDbContext>();
+    await EnsureLegacyMigrationHistoryAsync(db);
     await db.Database.MigrateAsync();
 }
 
@@ -86,3 +87,75 @@ app.MapHub<MusicControlHub>("/hubs/music-control");
 app.MapHub<SoundControlHub>("/hubs/sound-control");
 
 app.Run();
+
+static async Task EnsureLegacyMigrationHistoryAsync(KestrelleDbContext db)
+{
+    const string initialMigrationId = "20260114060433_InitialCreate";
+    const string initialProductVersion = "10.0.0";
+
+    await db.Database.OpenConnectionAsync();
+
+    try
+    {
+        var connection = db.Database.GetDbConnection();
+
+        await using var createHistory = connection.CreateCommand();
+        createHistory.CommandText = @"
+CREATE TABLE IF NOT EXISTS ""__EFMigrationsHistory"" (
+    ""MigrationId"" character varying(150) NOT NULL,
+    ""ProductVersion"" character varying(32) NOT NULL,
+    CONSTRAINT ""PK___EFMigrationsHistory"" PRIMARY KEY (""MigrationId"")
+);";
+        await createHistory.ExecuteNonQueryAsync();
+
+        await using var hasGuildsTableCommand = connection.CreateCommand();
+        hasGuildsTableCommand.CommandText = @"
+SELECT EXISTS (
+    SELECT 1
+    FROM information_schema.tables
+    WHERE table_schema = 'kestrelle' AND table_name = 'Guilds'
+);";
+        var hasGuildsTable = (bool?)await hasGuildsTableCommand.ExecuteScalarAsync() ?? false;
+
+        if (!hasGuildsTable)
+            return;
+
+        await using var hasInitialMigrationCommand = connection.CreateCommand();
+        hasInitialMigrationCommand.CommandText = @"
+SELECT EXISTS (
+    SELECT 1
+    FROM ""__EFMigrationsHistory""
+    WHERE ""MigrationId"" = @migrationId
+);";
+
+        var migrationIdParameter = hasInitialMigrationCommand.CreateParameter();
+        migrationIdParameter.ParameterName = "@migrationId";
+        migrationIdParameter.Value = initialMigrationId;
+        hasInitialMigrationCommand.Parameters.Add(migrationIdParameter);
+
+        var hasInitialMigration = (bool?)await hasInitialMigrationCommand.ExecuteScalarAsync() ?? false;
+        if (hasInitialMigration)
+            return;
+
+        await using var insertInitialMigrationCommand = connection.CreateCommand();
+        insertInitialMigrationCommand.CommandText = @"
+INSERT INTO ""__EFMigrationsHistory"" (""MigrationId"", ""ProductVersion"")
+VALUES (@migrationId, @productVersion);";
+
+        var insertMigrationIdParameter = insertInitialMigrationCommand.CreateParameter();
+        insertMigrationIdParameter.ParameterName = "@migrationId";
+        insertMigrationIdParameter.Value = initialMigrationId;
+        insertInitialMigrationCommand.Parameters.Add(insertMigrationIdParameter);
+
+        var productVersionParameter = insertInitialMigrationCommand.CreateParameter();
+        productVersionParameter.ParameterName = "@productVersion";
+        productVersionParameter.Value = initialProductVersion;
+        insertInitialMigrationCommand.Parameters.Add(productVersionParameter);
+
+        await insertInitialMigrationCommand.ExecuteNonQueryAsync();
+    }
+    finally
+    {
+        await db.Database.CloseConnectionAsync();
+    }
+}
