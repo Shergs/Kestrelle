@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using Discord.Audio;
@@ -58,14 +59,29 @@ public sealed class SoundPlaybackService(
         await StopAsync(guildId, CancellationToken.None);
 
         var cancellation = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        logger.LogInformation(
+            "Connecting sound bot to guild {GuildId} channel {ChannelId} for sound {SoundId} ({DisplayName}) requested by {User}. File: {FilePath}",
+            guildId,
+            voiceChannelId,
+            sound.Id,
+            sound.DisplayName,
+            requestedBy ?? "unknown",
+            filePath);
+
         var audioClient = await voiceChannel.ConnectAsync(selfDeaf: true, selfMute: false);
+        logger.LogInformation(
+            "Connected sound bot to guild {GuildId}. Voice state={ConnectionState} websocket latency={Latency} udp latency={UdpLatency}",
+            guildId,
+            audioClient.ConnectionState,
+            audioClient.Latency,
+            audioClient.UdpLatency);
+
         var playback = new ActivePlayback(audioClient, cancellation);
         _playbacks[guildId] = playback;
 
-        playback.Execution = RunPlaybackAsync(guildId, playback, filePath, cancellation.Token);
+        playback.Execution = RunPlaybackAsync(guildId, playback, sound, filePath, cancellation.Token);
         _ = WatchPlaybackAsync(guildId, playback);
 
-        logger.LogInformation("Playing sound {SoundId} in guild {GuildId} for {User}", sound.Id, guildId, requestedBy ?? "unknown");
         return (true, $"Playing {sound.DisplayName}.", sound.DisplayName);
     }
 
@@ -74,6 +90,7 @@ public sealed class SoundPlaybackService(
         if (!_playbacks.TryRemove(guildId, out var playback))
             return (false, "No sound is currently playing.");
 
+        logger.LogInformation("Stopping sound playback in guild {GuildId}.", guildId);
         await CleanupPlaybackAsync(playback).ConfigureAwait(false);
         return (true, "Stopped sound playback.");
     }
@@ -101,10 +118,13 @@ public sealed class SoundPlaybackService(
         }
     }
 
-    private async Task RunPlaybackAsync(ulong guildId, ActivePlayback playback, string filePath, CancellationToken ct)
+    private async Task RunPlaybackAsync(ulong guildId, ActivePlayback playback, Sound sound, string filePath, CancellationToken ct)
     {
         using var ffmpeg = CreateFfmpegProcess(filePath);
         ffmpeg.Start();
+
+        var stderrTask = ffmpeg.StandardError.ReadToEndAsync();
+        logger.LogInformation("ffmpeg started for sound {SoundId} in guild {GuildId}.", sound.Id, guildId);
 
         using var registration = ct.Register(() =>
         {
@@ -119,18 +139,67 @@ public sealed class SoundPlaybackService(
         });
 
         await using var discordStream = playback.AudioClient.CreatePCMStream(AudioApplication.Mixed);
+        var buffer = ArrayPool<byte>.Shared.Rent(81920);
+        long bytesSent = 0;
 
         try
         {
-            await ffmpeg.StandardOutput.BaseStream.CopyToAsync(discordStream, ct).ConfigureAwait(false);
-            await discordStream.FlushAsync().ConfigureAwait(false);
+            await Task.Delay(TimeSpan.FromMilliseconds(250), ct).ConfigureAwait(false);
+
+            while (true)
+            {
+                var bytesRead = await ffmpeg.StandardOutput.BaseStream
+                    .ReadAsync(buffer.AsMemory(0, buffer.Length), ct)
+                    .ConfigureAwait(false);
+
+                if (bytesRead == 0)
+                    break;
+
+                bytesSent += bytesRead;
+                await discordStream.WriteAsync(buffer.AsMemory(0, bytesRead), ct).ConfigureAwait(false);
+            }
+
+            await discordStream.FlushAsync(ct).ConfigureAwait(false);
             await ffmpeg.WaitForExitAsync(ct).ConfigureAwait(false);
 
+            var ffmpegError = await stderrTask.ConfigureAwait(false);
+
             if (ffmpeg.ExitCode != 0)
-                logger.LogWarning("ffmpeg exited with code {ExitCode} while playing {FilePath} in guild {GuildId}.", ffmpeg.ExitCode, filePath, guildId);
+            {
+                logger.LogWarning(
+                    "ffmpeg exited with code {ExitCode} while playing sound {SoundId} in guild {GuildId}. stderr: {StandardError}",
+                    ffmpeg.ExitCode,
+                    sound.Id,
+                    guildId,
+                    string.IsNullOrWhiteSpace(ffmpegError) ? "<empty>" : ffmpegError.Trim());
+            }
+            else if (bytesSent == 0)
+            {
+                logger.LogWarning(
+                    "ffmpeg produced no PCM output while playing sound {SoundId} in guild {GuildId}. stderr: {StandardError}",
+                    sound.Id,
+                    guildId,
+                    string.IsNullOrWhiteSpace(ffmpegError) ? "<empty>" : ffmpegError.Trim());
+            }
+            else
+            {
+                logger.LogInformation(
+                    "Finished sound playback for sound {SoundId} in guild {GuildId}. Bytes sent: {BytesSent}.",
+                    sound.Id,
+                    guildId,
+                    bytesSent);
+
+                if (!string.IsNullOrWhiteSpace(ffmpegError))
+                    logger.LogDebug("ffmpeg stderr for sound {SoundId} in guild {GuildId}: {StandardError}", sound.Id, guildId, ffmpegError.Trim());
+            }
         }
         catch (OperationCanceledException)
         {
+            logger.LogDebug("Sound playback canceled for sound {SoundId} in guild {GuildId}.", sound.Id, guildId);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
         }
     }
 
@@ -164,7 +233,7 @@ public sealed class SoundPlaybackService(
             StartInfo = new ProcessStartInfo
             {
                 FileName = "ffmpeg",
-                Arguments = $"-hide_banner -loglevel error -i \"{filePath.Replace("\\", "\\\\")}\" -ac 2 -f s16le -ar 48000 pipe:1",
+                Arguments = $"-hide_banner -loglevel error -i \"{filePath.Replace("\\", "\\\\")}\" -vn -sn -dn -ac 2 -f s16le -ar 48000 pipe:1",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
@@ -200,3 +269,4 @@ public sealed class SoundPlaybackService(
         public Task? Execution { get; set; }
     }
 }
+
