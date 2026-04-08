@@ -92,9 +92,9 @@ export function OverviewPage() {
                 The premium control plane for music in your Discord.
               </h1>
               <p className="mt-3 text-sm leading-6 text-slate-400">
-                Kestrelle gives your server a professional‑grade music experience with real‑time dashboard controls,
-                queue management, and a refined Now Playing view. Soundboard is next — curated clips, intro stingers,
-                and reactions, all managed from the same product.
+                Kestrelle gives your server a professional-grade music experience with real-time dashboard controls,
+                queue management, a refined Now Playing view, and a full guild soundboard for reactions, stingers,
+                and hype moments managed from the same dashboard.
               </p>
               <div className="mt-5 flex flex-wrap gap-2">
                 <a
@@ -119,9 +119,10 @@ export function OverviewPage() {
                 </Link>
               </div>
               <div className="mt-5 flex flex-wrap gap-2">
-                <Pill>Real‑time control</Pill>
+                <Pill>Real-time control</Pill>
                 <Pill>Queue intelligence</Pill>
                 <Pill>Trusted playback</Pill>
+                <Pill>Guild soundboard</Pill>
               </div>
             </div>
 
@@ -150,19 +151,19 @@ export function OverviewPage() {
           title="Modern Dashboard"
           body="A clean, professional interface that feels like a real product."
           items={[
-            "Server‑scoped access with Discord authentication.",
+            "Server-scoped access with Discord authentication.",
             "Live queue rendering and rich track context.",
             "Built for clarity: fast, focused, and consistent.",
           ]}
         />
         <FeatureCard
           accent="emerald"
-          title="Soundboard (Coming Soon)"
-          body="Short clips, intros, and reactions — managed alongside music."
+          title="Soundboard"
+          body="Short clips, intros, and reactions - managed alongside music and playable from chat or the dashboard."
           items={[
-            "Trigger curated clips from the dashboard.",
-            "Moderation‑friendly controls and permissions.",
-            "Designed for server identity and moments.",
+            "Upload and manage guild-local clips from the dashboard.",
+            "Trigger sounds from chat commands or the web UI.",
+            "Built for server identity, reactions, and moments.",
           ]}
         />
       </div>
@@ -170,13 +171,13 @@ export function OverviewPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <HighlightCard
           title="Built for servers that take quality seriously"
-          body="Kestrelle isn’t a hobby bot. It’s a product experience for communities that want clarity, polish, and control without micromanaging commands."
-          foot="Launch the dashboard to see your music state, control playback, and keep everything professional." 
+          body="Kestrelle is a product experience for communities that want clarity, polish, and control without micromanaging commands."
+          foot="Launch the dashboard to see your music state, control playback, trigger soundboard clips, and keep everything professional."
         />
         <HighlightCard
-          title="Roadmap: Pro + Soundboard"
-          body="We’re polishing the next layer: soundboard clips, advanced queue workflows, and Pro automation."
-          foot="Upgrade to Pro is coming soon — sign up inside the app to stay in the loop."
+          title="Roadmap: Pro + Automation"
+          body="Soundboard is live. Next up: advanced queue workflows, deeper moderation controls, and Pro automation."
+          foot="Upgrade to Pro is coming soon - sign up inside the app to stay in the loop."
         />
       </div>
 
@@ -185,7 +186,7 @@ export function OverviewPage() {
           <div>
             <div className="text-base font-semibold text-slate-100">Ready to launch?</div>
             <div className="mt-1 text-sm text-slate-400">
-              Choose a server and take control of your music experience.
+              Choose a server and take control of your music and soundboard experience.
             </div>
           </div>
           <div className="flex flex-wrap gap-2">

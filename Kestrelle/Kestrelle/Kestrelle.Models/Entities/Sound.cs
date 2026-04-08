@@ -1,4 +1,4 @@
-﻿namespace Kestrelle.Models.Entities;
+namespace Kestrelle.Models.Entities;
 
 public enum SoundStorageProvider
 {
@@ -19,6 +19,8 @@ public sealed class Sound
     public DiscordUser UploadedByUser { get; set; } = null!;
 
     public string DisplayName { get; set; } = string.Empty;
+    public string Trigger { get; set; } = string.Empty;
+    public string OriginalFileName { get; set; } = string.Empty;
 
     // File metadata
     public SoundStorageProvider StorageProvider { get; set; } = SoundStorageProvider.Unknown;
@@ -31,4 +33,6 @@ public sealed class Sound
     public bool IsPublicWithinGuild { get; set; } = true;
 
     public DateTimeOffset CreatedUtc { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset UpdatedUtc { get; set; } = DateTimeOffset.UtcNow;
 }
+

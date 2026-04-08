@@ -7,6 +7,7 @@ import { FeatureTabs, DashboardFeature } from "../components/dashboard/FeatureTa
 import { useSelectedGuild } from "../state/guild/SelectedGuildContext";
 import { useMusicRealtime } from "../state/music/MusicRealtimeContext";
 import { useAuth } from "../state/auth/AuthContext";
+import { SoundsFeaturePanel } from "../components/dashboard/SoundsFeaturePanel";
 
 function SectionCard({
   title,
@@ -695,45 +696,6 @@ function MusicFeature() {
   );
 }
 
-function SoundsFeature() {
-  return (
-    <div className="grid gap-4 lg:grid-cols-3">
-      <SectionCard title="Soundboard" subtitle="Trigger short clips on demand.">
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {["Airhorn", "Bruh", "Clap", "Sad trombone", "Hype", "Rimshot"].map((s) => (
-            <button
-              key={s}
-              className="rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-sm text-slate-200 hover:bg-slate-900"
-            >
-              {s}
-            </button>
-          ))}
-        </div>
-      </SectionCard>
-
-      <SectionCard title="Upload & Manage" subtitle="Future: user uploads and moderation.">
-        <div className="text-sm text-slate-400">
-          Placeholder for upload controls and sound management UI.
-        </div>
-        <div className="mt-4 space-y-2">
-          <button className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm hover:bg-slate-900">
-            Upload Sound (future)
-          </button>
-          <button className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm hover:bg-slate-900">
-            Manage Sounds (future)
-          </button>
-        </div>
-      </SectionCard>
-
-      <SectionCard title="Permissions" subtitle="Future: per-server role controls and limits.">
-        <div className="text-sm text-slate-400">
-          Placeholder for role-based access and quotas.
-        </div>
-      </SectionCard>
-    </div>
-  );
-}
-
 export function DashboardPage() {
   const [feature, setFeature] = useState<DashboardFeature>("music");
   const auth = useAuth();
@@ -779,9 +741,11 @@ export function DashboardPage() {
           title="Select a server"
           subtitle="Choose a server to unlock this dashboard feature."
         >
-          {feature === "music" ? <MusicFeature /> : <SoundsFeature />}
+          {feature === "music" ? <MusicFeature /> : <SoundsFeaturePanel />}
         </RequireGuildGate>
       </AuthOverlayGate>
     </div>
   );
 }
+
+

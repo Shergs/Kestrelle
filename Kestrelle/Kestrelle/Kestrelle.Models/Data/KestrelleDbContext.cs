@@ -1,4 +1,4 @@
-﻿using Kestrelle.Models.Entities;
+using Kestrelle.Models.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace Kestrelle.Models.Data;
@@ -37,10 +37,13 @@ public sealed class KestrelleDbContext : DbContext
             e.HasKey(x => x.Id);
 
             e.Property(x => x.DisplayName).HasMaxLength(200).IsRequired();
+            e.Property(x => x.Trigger).HasMaxLength(64).IsRequired();
+            e.Property(x => x.OriginalFileName).HasMaxLength(260).IsRequired();
             e.Property(x => x.StorageKey).HasMaxLength(1024).IsRequired();
             e.Property(x => x.ContentType).HasMaxLength(128);
 
             e.HasIndex(x => new { x.GuildId, x.DisplayName });
+            e.HasIndex(x => new { x.GuildId, x.Trigger }).IsUnique();
 
             e.HasOne(x => x.UploadedByUser)
                 .WithMany(x => x.UploadedSounds)
@@ -56,3 +59,4 @@ public sealed class KestrelleDbContext : DbContext
         });
     }
 }
+
