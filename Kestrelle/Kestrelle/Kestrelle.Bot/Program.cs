@@ -22,7 +22,8 @@ builder.Services.AddSingleton(_ =>
 {
     var config = new DiscordSocketConfig
     {
-        GatewayIntents = GatewayIntents.Guilds | GatewayIntents.GuildVoiceStates
+        GatewayIntents = GatewayIntents.Guilds | GatewayIntents.GuildVoiceStates,
+        EnableVoiceDaveEncryption = true,
     };
 
     return new DiscordSocketClient(config);

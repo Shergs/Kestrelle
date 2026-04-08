@@ -10,9 +10,9 @@ public sealed class SoundDiscordClientAccessor
         Client = new DiscordSocketClient(new DiscordSocketConfig
         {
             GatewayIntents = GatewayIntents.Guilds | GatewayIntents.GuildVoiceStates,
+            EnableVoiceDaveEncryption = true,
         });
     }
 
     public DiscordSocketClient Client { get; }
 }
-
