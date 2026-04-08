@@ -22,6 +22,9 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /app/publish .
-COPY --from=libdave-build /tmp/libdave/cpp/build/install/lib/ ./
+COPY --from=libdave-build /tmp/libdave/cpp/build/install/lib/ /usr/local/lib/
+RUN cp -a /usr/local/lib/libdave.so* /app/ 2>/dev/null || true \
+    && ldconfig
+ENV LD_LIBRARY_PATH=/usr/local/lib:/app
 ENV DOTNET_EnableDiagnostics=0
 ENTRYPOINT ["dotnet", "Kestrelle.Bot.dll"]
