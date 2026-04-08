@@ -21,6 +21,8 @@ type VoiceChannel = {
   name: string;
 };
 
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+
 function SectionCard({
   title,
   subtitle,
@@ -64,16 +66,42 @@ function slugify(value: string) {
     .slice(0, 64);
 }
 
+function getFriendlyErrorMessage(status: number, text?: string | null) {
+  if (status === 413) {
+    return "That upload is larger than the current server upload limit. Keep it under 5 MiB.";
+  }
+
+  if (status >= 500) {
+    return "The soundboard server hit an internal error. Check the API logs and try again.";
+  }
+
+  const trimmed = text?.trim();
+  if (!trimmed) {
+    return `Request failed (${status}).`;
+  }
+
+  if (trimmed.startsWith("<!DOCTYPE html") || trimmed.startsWith("<html")) {
+    return `Request failed (${status}).`;
+  }
+
+  return trimmed;
+}
+
 async function parseError(response: Response) {
   const text = await response.text().catch(() => "");
-  if (!text) return `Request failed (${response.status}).`;
+  if (!text) return getFriendlyErrorMessage(response.status, null);
 
-  try {
-    const json = JSON.parse(text) as { error?: string };
-    return json.error ?? text;
-  } catch {
-    return text;
+  const contentType = response.headers.get("content-type") ?? "";
+  if (contentType.includes("application/json")) {
+    try {
+      const json = JSON.parse(text) as { error?: string; title?: string; detail?: string };
+      return json.error ?? json.detail ?? json.title ?? getFriendlyErrorMessage(response.status, text);
+    } catch {
+      return getFriendlyErrorMessage(response.status, text);
+    }
   }
+
+  return getFriendlyErrorMessage(response.status, text);
 }
 
 export function SoundsFeaturePanel() {
@@ -123,23 +151,30 @@ export function SoundsFeaturePanel() {
     setError(null);
 
     void (async () => {
-      const response = await fetch(`/api/sounds/guilds/${encodeURIComponent(selectedGuildId)}`, {
-        credentials: "include",
-        headers: { Accept: "application/json" },
-      });
+      try {
+        const response = await fetch(`/api/sounds/guilds/${encodeURIComponent(selectedGuildId)}`, {
+          credentials: "include",
+          headers: { Accept: "application/json" },
+        });
 
-      if (cancelled) return;
+        if (cancelled) return;
 
-      if (!response.ok) {
-        setSounds([]);
-        setError(await parseError(response));
+        if (!response.ok) {
+          setSounds([]);
+          setError(await parseError(response));
+          setIsLoading(false);
+          return;
+        }
+
+        const data = (await response.json()) as SoundSummary[];
+        setSounds(Array.isArray(data) ? data : []);
         setIsLoading(false);
-        return;
+      } catch {
+        if (cancelled) return;
+        setSounds([]);
+        setError("The soundboard request failed before the server responded.");
+        setIsLoading(false);
       }
-
-      const data = (await response.json()) as SoundSummary[];
-      setSounds(Array.isArray(data) ? data : []);
-      setIsLoading(false);
     })();
 
     return () => {
@@ -223,6 +258,11 @@ export function SoundsFeaturePanel() {
       return;
     }
 
+    if (uploadFile.size > MAX_UPLOAD_BYTES) {
+      push({ kind: "warning", title: "Upload", message: "Sound files must be 5 MiB or smaller." });
+      return;
+    }
+
     const formData = new FormData();
     formData.append("file", uploadFile);
     formData.append("displayName", displayName);
@@ -244,6 +284,8 @@ export function SoundsFeaturePanel() {
 
         xhr.onload = () => {
           const responseText = xhr.responseText || "";
+          const contentType = xhr.getResponseHeader("content-type") ?? "";
+
           if (xhr.status >= 200 && xhr.status < 300) {
             try {
               resolve(JSON.parse(responseText) as SoundSummary);
@@ -253,12 +295,16 @@ export function SoundsFeaturePanel() {
             return;
           }
 
-          try {
-            const json = JSON.parse(responseText) as { error?: string };
-            reject(new Error(json.error ?? (responseText || `Upload failed (${xhr.status}).`)));
-          } catch {
-            reject(new Error(responseText || `Upload failed (${xhr.status}).`));
+          if (contentType.includes("application/json")) {
+            try {
+              const json = JSON.parse(responseText) as { error?: string; title?: string; detail?: string };
+              reject(new Error(json.error ?? json.detail ?? json.title ?? getFriendlyErrorMessage(xhr.status, responseText)));
+              return;
+            } catch {
+            }
           }
+
+          reject(new Error(getFriendlyErrorMessage(xhr.status, responseText)));
         };
 
         xhr.onerror = () => reject(new Error("Upload failed due to a network error."));
@@ -635,4 +681,3 @@ export function SoundsFeaturePanel() {
     </div>
   );
 }
-
