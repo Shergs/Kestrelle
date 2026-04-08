@@ -11,6 +11,7 @@ internal sealed class SoundControlSubscriber(
     SoundPlaybackService playbackService,
     ILogger<SoundControlSubscriber> logger) : BackgroundService
 {
+    private static readonly TimeSpan ReconnectDelay = TimeSpan.FromSeconds(5);
     private HubConnection? _connection;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -25,26 +26,35 @@ internal sealed class SoundControlSubscriber(
         }
 
         var hubUrl = new Uri(new Uri(baseUrl, UriKind.Absolute), "/hubs/sound-control");
+        _connection = BuildConnection(hubUrl, botKey, stoppingToken);
 
-        _connection = new HubConnectionBuilder()
-            .WithUrl(hubUrl, options =>
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
             {
-                options.Headers["X-Kestrelle-BotKey"] = botKey;
-            })
-            .WithAutomaticReconnect()
-            .Build();
+                if (_connection.State == HubConnectionState.Disconnected)
+                    await _connection.StartAsync(stoppingToken).ConfigureAwait(false);
 
-        _connection.On<SoundControlRequest>("ControlRequested", request => HandleControlAsync(request, stoppingToken));
+                logger.LogInformation("Connected to sound control hub.");
+                await Task.Delay(Timeout.Infinite, stoppingToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Sound control hub connection failed. Retrying in {DelaySeconds}s.", ReconnectDelay.TotalSeconds);
 
-        await _connection.StartAsync(stoppingToken).ConfigureAwait(false);
-        logger.LogInformation("Connected to sound control hub.");
-
-        try
-        {
-            await Task.Delay(Timeout.Infinite, stoppingToken).ConfigureAwait(false);
-        }
-        catch (TaskCanceledException)
-        {
+                try
+                {
+                    await Task.Delay(ReconnectDelay, stoppingToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
+            }
         }
     }
 
@@ -57,6 +67,20 @@ internal sealed class SoundControlSubscriber(
         }
 
         await base.StopAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private HubConnection BuildConnection(Uri hubUrl, string botKey, CancellationToken stoppingToken)
+    {
+        var connection = new HubConnectionBuilder()
+            .WithUrl(hubUrl, options =>
+            {
+                options.Headers["X-Kestrelle-BotKey"] = botKey;
+            })
+            .WithAutomaticReconnect()
+            .Build();
+
+        connection.On<SoundControlRequest>("ControlRequested", request => HandleControlAsync(request, stoppingToken));
+        return connection;
     }
 
     private async Task HandleControlAsync(SoundControlRequest request, CancellationToken ct)

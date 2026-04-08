@@ -43,27 +43,41 @@ internal sealed class MusicControlSubscriber(
             .ConfigureLogging(logging =>
             {
                 logging.SetMinimumLevel(LogLevel.Information);
-
             })
             .Build();
 
         _connection.On<MusicControlRequest>("ControlRequested", request =>
             HandleControlAsync(request, stoppingToken));
 
-        await _connection.StartAsync(stoppingToken).ConfigureAwait(false);
-
-        logger.LogInformation("Connected to music control hub.");
-
-        try
+        while (!stoppingToken.IsCancellationRequested)
         {
-            await Task.Delay(Timeout.Infinite, stoppingToken).ConfigureAwait(false);
-        }
-        catch (TaskCanceledException)
-        {
-            // expected on shutdown
+            try
+            {
+                if (_connection.State == HubConnectionState.Disconnected)
+                    await _connection.StartAsync(stoppingToken).ConfigureAwait(false);
+
+                logger.LogInformation("Connected to music control hub.");
+                await Task.Delay(Timeout.Infinite, stoppingToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Music control hub connection failed. Retrying in 5s.");
+
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
+            }
         }
     }
-
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
         if (_connection is not null)
@@ -663,3 +677,4 @@ internal sealed class MusicControlSubscriber(
         return realtimePublisher.PublishToastAsync(payload, ct);
     }
 }
+
