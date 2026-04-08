@@ -1,5 +1,6 @@
 using Discord;
 using Discord.WebSocket;
+using Kestrelle.Bot;
 using Kestrelle.Models.Data;
 using Kestrelle.Bot.Interactions;
 using Kestrelle.Bot.Music;
@@ -10,6 +11,7 @@ using Lavalink4NET.Extensions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 var builder = Host.CreateApplicationBuilder(args);
 
@@ -18,11 +20,15 @@ if (builder.Environment.IsDevelopment())
     builder.Configuration.AddUserSecrets<Program>(optional: true);
 }
 
-builder.Services.AddSingleton(_ =>
+builder.Services.AddSingleton(sp =>
 {
+    var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("DaveRuntimeBootstrapper");
+    DaveRuntimeBootstrapper.EnsureInitialized(logger);
+
     var config = new DiscordSocketConfig
     {
-        GatewayIntents = GatewayIntents.Guilds | GatewayIntents.GuildVoiceStates
+        GatewayIntents = GatewayIntents.Guilds | GatewayIntents.GuildVoiceStates,
+        EnableVoiceDaveEncryption = true,
     };
 
     return new DiscordSocketClient(config);
