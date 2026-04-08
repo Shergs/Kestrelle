@@ -4,13 +4,13 @@ server:
 
 lavalink:
   server:
-    password: "yousshallnotpass"
+    password: "youshallnotpass"
     sources:
       youtube: false   # IMPORTANT: disable built-in YouTube source
 
   plugins:
     # Install youtube-source plugin (auto-download)
-    - dependency: "dev.lavalink.youtube:youtube-plugin:1.16.0"
+    - dependency: "dev.lavalink.youtube:youtube-plugin:1.18.0"
       snapshot: false
 
 plugins:
@@ -24,3 +24,4 @@ plugins:
       - ANDROID_VR
       - WEB
       - WEBEMBEDDED
+
