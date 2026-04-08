@@ -52,6 +52,13 @@ public sealed class SoundPlaybackService(
         if (voiceChannel is null)
             return (false, "Voice channel not found.", null);
 
+        var permissions = guild.CurrentUser.GetPermissions(voiceChannel);
+        if (!permissions.Connect)
+            return (false, "Sound bot does not have permission to connect to that voice channel.", null);
+
+        if (!permissions.Speak)
+            return (false, "Sound bot does not have permission to speak in that voice channel.", null);
+
         var filePath = ResolveAbsolutePath(sound.StorageKey);
         if (!File.Exists(filePath))
             return (false, "Sound file is missing from storage.", null);
@@ -138,13 +145,14 @@ public sealed class SoundPlaybackService(
             }
         });
 
-        await using var discordStream = playback.AudioClient.CreatePCMStream(AudioApplication.Mixed);
         var buffer = ArrayPool<byte>.Shared.Rent(81920);
         long bytesSent = 0;
 
         try
         {
-            await Task.Delay(TimeSpan.FromMilliseconds(250), ct).ConfigureAwait(false);
+            await Task.Delay(TimeSpan.FromMilliseconds(500), ct).ConfigureAwait(false);
+            await playback.AudioClient.SetSpeakingAsync(true).ConfigureAwait(false);
+            await using var discordStream = playback.AudioClient.CreatePCMStream(AudioApplication.Mixed, bitrate: 128_000, bufferMillis: 1000, packetLoss: 30);
 
             while (true)
             {
@@ -199,6 +207,15 @@ public sealed class SoundPlaybackService(
         }
         finally
         {
+            try
+            {
+                await playback.AudioClient.SetSpeakingAsync(false).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                logger.LogDebug(ex, "Failed to clear speaking state for guild {GuildId}.", guildId);
+            }
+
             ArrayPool<byte>.Shared.Return(buffer);
         }
     }
@@ -269,4 +286,3 @@ public sealed class SoundPlaybackService(
         public Task? Execution { get; set; }
     }
 }
-
