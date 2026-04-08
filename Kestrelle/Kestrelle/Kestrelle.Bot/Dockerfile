@@ -8,7 +8,7 @@ RUN dotnet publish Kestrelle/Kestrelle/Kestrelle.Bot/Kestrelle.Bot.csproj -c Rel
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg libopus0 libsodium23 \
+    && apt-get install -y --no-install-recommends ffmpeg libopus0 libopus-dev libsodium23 libsodium-dev \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /app/publish .

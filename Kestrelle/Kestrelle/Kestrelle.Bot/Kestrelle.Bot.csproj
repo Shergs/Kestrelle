@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -11,8 +11,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Discord.Net.Interactions" Version="3.18.0" />
-    <PackageReference Include="Discord.Net.WebSocket" Version="3.18.0" />
+    <PackageReference Include="Discord.Net.Interactions" Version="3.19.1" />
+    <PackageReference Include="Discord.Net.WebSocket" Version="3.19.1" />
     <PackageReference Include="Lavalink4NET" Version="4.1.0" />
     <PackageReference Include="Lavalink4NET.Discord.NET" Version="4.1.0" />
     <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.2" />
@@ -36,3 +36,4 @@
   </ItemGroup>
 
 </Project>
+
