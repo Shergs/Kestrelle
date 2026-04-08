@@ -1,4 +1,4 @@
-﻿using Discord.Interactions;
+using Discord.Interactions;
 using Discord.WebSocket;
 using Lavalink4NET;
 using Lavalink4NET.Players;
@@ -39,15 +39,13 @@ internal class InteractionHandler(
             return Task.CompletedTask;
         };
 
-
-        await interactions.AddModulesAsync(typeof(InteractionHandler).Assembly, services);
+        await interactions.AddModuleAsync<MusicModule>(services);
 
         client.Ready += async () =>
         {
             const ulong bigOneGuildId = 783190942806835200;
             await interactions.RegisterCommandsToGuildAsync(bigOneGuildId);
 
-            //await interactions.RegisterCommandsGloballyAsync();
             logger.LogInformation("Slash commands registered.");
         };
     }
@@ -80,7 +78,7 @@ internal class InteractionHandler(
     private async Task HandleNowPlayingButtonsAsync(SocketMessageComponent component)
     {
         if (component.Data.CustomId is null || !component.Data.CustomId.StartsWith("np:"))
-        { 
+        {
             return;
         }
 
@@ -99,12 +97,6 @@ internal class InteractionHandler(
             return;
         }
 
-        // Optional: restrict to users in voice channel
-        // var guild = client.GetGuild(guildId);
-        // var user = guild?.GetUser(component.User.Id);
-        // if (user?.VoiceChannel is null) { ... }
-
-        // Always acknowledge quickly to avoid "interaction failed"
         await component.DeferAsync(ephemeral: true).ConfigureAwait(false);
 
         var retrieveOptions = new PlayerRetrieveOptions(ChannelBehavior: PlayerChannelBehavior.None);

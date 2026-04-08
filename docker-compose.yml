@@ -22,7 +22,7 @@ services:
       - ./Kestrelle/Kestrelle/Kestrelle.Lavalink/application.yml:/opt/Lavalink/application.yml:ro
       - ./Kestrelle/Kestrelle/Kestrelle.Lavalink/plugins:/opt/Lavalink/plugins
     ports:
-      - "2333:2333" # optional; expose only when we want to access from host
+      - "2333:2333"
 
   kestrelle-bot:
     build:
@@ -38,10 +38,14 @@ services:
       - Lavalink__WebSocketUri=ws://lavalink:2333/v4/websocket
       - Lavalink__Passphrase=youshallnotpass
       - Discord__Token=${DISCORD_TOKEN}
+      - Discord__SoundToken=${DISCORD_SOUND_TOKEN}
       - ConnectionStrings__KestrelleDb=${ConnectionStrings_KestrelleDb}
       - Kestrelle__BotApiKey=${KESTRELLE_BOT_API_KEY}
       - KestrelleApi__BaseAddress=${KESTRELLE_API_BASE_ADDRESS}
-      
+      - Sounds__RootPath=/var/lib/kestrelle/sounds
+    volumes:
+      - kestrelle_sounds:/var/lib/kestrelle/sounds:ro
+
   kestrelle-api:
     build:
       context: .
@@ -57,6 +61,9 @@ services:
       - ConnectionStrings__KestrelleDb=${ConnectionStrings_KestrelleDb}
       - ASPNETCORE_URLS=http://+:8080
       - Kestrelle__BotApiKey=${KESTRELLE_BOT_API_KEY}
+      - Sounds__RootPath=/var/lib/kestrelle/sounds
+    volumes:
+      - kestrelle_sounds:/var/lib/kestrelle/sounds
     expose:
       - "8080"
 
@@ -71,6 +78,7 @@ services:
       - kestrelle-api
     ports:
       - "8080:80"
-      
+
 volumes:
   kestrelle_pgdata:
+  kestrelle_sounds:

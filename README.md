@@ -199,3 +199,4 @@ Check in browser DevTools → Network:
 - Bot ↔ API messaging for state synchronization
 - Soundboard uploads backed by DB + storage
 - Role-based auth and per-guild settings
+
