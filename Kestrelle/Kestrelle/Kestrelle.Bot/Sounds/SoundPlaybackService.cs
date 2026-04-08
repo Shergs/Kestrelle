@@ -75,13 +75,17 @@ public sealed class SoundPlaybackService(
             requestedBy ?? "unknown",
             filePath);
 
-        var audioClient = await voiceChannel.ConnectAsync(selfDeaf: true, selfMute: false);
+        var audioClient = await voiceChannel.ConnectAsync(selfDeaf: false, selfMute: false);
+        var currentVoiceState = guild.CurrentUser.VoiceState;
         logger.LogInformation(
-            "Connected sound bot to guild {GuildId}. Voice state={ConnectionState} websocket latency={Latency} udp latency={UdpLatency}",
+            "Connected sound bot to guild {GuildId}. Voice state={ConnectionState} websocket latency={Latency} udp latency={UdpLatency} currentChannel={CurrentChannelId} muted={IsMuted} deafened={IsDeafened}",
             guildId,
             audioClient.ConnectionState,
             audioClient.Latency,
-            audioClient.UdpLatency);
+            audioClient.UdpLatency,
+            currentVoiceState?.VoiceChannel?.Id,
+            currentVoiceState?.IsMuted,
+            currentVoiceState?.IsDeafened);
 
         var playback = new ActivePlayback(audioClient, cancellation);
         _playbacks[guildId] = playback;
@@ -286,3 +290,4 @@ public sealed class SoundPlaybackService(
         public Task? Execution { get; set; }
     }
 }
+
