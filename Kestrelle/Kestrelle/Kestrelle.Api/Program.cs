@@ -62,6 +62,7 @@ await using (var scope = app.Services.CreateAsyncScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<KestrelleDbContext>();
     await EnsureLegacyMigrationHistoryAsync(db);
+    await EnsureSoundboardMigrationStateAsync(db);
     await db.Database.MigrateAsync();
 }
 
@@ -108,54 +109,129 @@ CREATE TABLE IF NOT EXISTS ""__EFMigrationsHistory"" (
 );";
         await createHistory.ExecuteNonQueryAsync();
 
-        await using var hasGuildsTableCommand = connection.CreateCommand();
-        hasGuildsTableCommand.CommandText = @"
+        if (!await TableExistsAsync(connection, "kestrelle", "Guilds"))
+            return;
+
+        if (await MigrationExistsAsync(connection, initialMigrationId))
+            return;
+
+        await InsertMigrationAsync(connection, initialMigrationId, initialProductVersion);
+    }
+    finally
+    {
+        await db.Database.CloseConnectionAsync();
+    }
+}
+
+static async Task EnsureSoundboardMigrationStateAsync(KestrelleDbContext db)
+{
+    const string migrationId = "20260408033748_AddSoundboardMetadata";
+    const string productVersion = "10.0.0";
+
+    await db.Database.OpenConnectionAsync();
+
+    try
+    {
+        var connection = db.Database.GetDbConnection();
+
+        if (!await TableExistsAsync(connection, "kestrelle", "Sounds"))
+            return;
+
+        if (await MigrationExistsAsync(connection, migrationId))
+            return;
+
+        await ExecuteNonQueryAsync(connection, @"
+ALTER TABLE kestrelle.""Sounds"" ADD COLUMN IF NOT EXISTS ""OriginalFileName"" character varying(260) NOT NULL DEFAULT '';
+ALTER TABLE kestrelle.""Sounds"" ADD COLUMN IF NOT EXISTS ""Trigger"" character varying(64) NOT NULL DEFAULT '';
+ALTER TABLE kestrelle.""Sounds"" ADD COLUMN IF NOT EXISTS ""UpdatedUtc"" timestamp with time zone NOT NULL DEFAULT TIMESTAMPTZ '-infinity';
+");
+
+        await ExecuteNonQueryAsync(connection, @"
+UPDATE kestrelle.""Sounds""
+SET ""Trigger"" = 'sound-' || substring(replace(cast(""Id"" as text), '-', ''), 1, 12)
+WHERE coalesce(""Trigger"", '') = '';
+");
+
+        await ExecuteNonQueryAsync(connection, @"
+CREATE TABLE IF NOT EXISTS kestrelle.""DiscordOAuthTokens"" (
+    ""DiscordUserId"" numeric(20,0) NOT NULL,
+    ""AccessToken"" text NOT NULL,
+    ""RefreshToken"" text NOT NULL,
+    ""Scope"" text NOT NULL,
+    ""ExpiresAtUtc"" timestamp with time zone NOT NULL,
+    ""UserId"" numeric(20,0) NOT NULL,
+    CONSTRAINT ""PK_DiscordOAuthTokens"" PRIMARY KEY (""DiscordUserId""),
+    CONSTRAINT ""FK_DiscordOAuthTokens_Users_UserId"" FOREIGN KEY (""UserId"") REFERENCES kestrelle.""Users"" (""Id"") ON DELETE CASCADE
+);
+");
+
+        await ExecuteNonQueryAsync(connection, @"
+CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Sounds_GuildId_Trigger"" ON kestrelle.""Sounds"" (""GuildId"", ""Trigger"");
+CREATE INDEX IF NOT EXISTS ""IX_DiscordOAuthTokens_UserId"" ON kestrelle.""DiscordOAuthTokens"" (""UserId"");
+");
+
+        await InsertMigrationAsync(connection, migrationId, productVersion);
+    }
+    finally
+    {
+        await db.Database.CloseConnectionAsync();
+    }
+}
+
+static async Task<bool> TableExistsAsync(System.Data.Common.DbConnection connection, string schema, string table)
+{
+    await using var command = connection.CreateCommand();
+    command.CommandText = @"
 SELECT EXISTS (
     SELECT 1
     FROM information_schema.tables
-    WHERE table_schema = 'kestrelle' AND table_name = 'Guilds'
+    WHERE table_schema = @schema AND table_name = @table
 );";
-        var hasGuildsTable = (bool?)await hasGuildsTableCommand.ExecuteScalarAsync() ?? false;
 
-        if (!hasGuildsTable)
-            return;
+    AddParameter(command, "@schema", schema);
+    AddParameter(command, "@table", table);
 
-        await using var hasInitialMigrationCommand = connection.CreateCommand();
-        hasInitialMigrationCommand.CommandText = @"
+    return (bool?)await command.ExecuteScalarAsync() ?? false;
+}
+
+static async Task<bool> MigrationExistsAsync(System.Data.Common.DbConnection connection, string migrationId)
+{
+    await using var command = connection.CreateCommand();
+    command.CommandText = @"
 SELECT EXISTS (
     SELECT 1
     FROM ""__EFMigrationsHistory""
     WHERE ""MigrationId"" = @migrationId
 );";
 
-        var migrationIdParameter = hasInitialMigrationCommand.CreateParameter();
-        migrationIdParameter.ParameterName = "@migrationId";
-        migrationIdParameter.Value = initialMigrationId;
-        hasInitialMigrationCommand.Parameters.Add(migrationIdParameter);
+    AddParameter(command, "@migrationId", migrationId);
+    return (bool?)await command.ExecuteScalarAsync() ?? false;
+}
 
-        var hasInitialMigration = (bool?)await hasInitialMigrationCommand.ExecuteScalarAsync() ?? false;
-        if (hasInitialMigration)
-            return;
-
-        await using var insertInitialMigrationCommand = connection.CreateCommand();
-        insertInitialMigrationCommand.CommandText = @"
+static async Task InsertMigrationAsync(System.Data.Common.DbConnection connection, string migrationId, string productVersion)
+{
+    await using var command = connection.CreateCommand();
+    command.CommandText = @"
 INSERT INTO ""__EFMigrationsHistory"" (""MigrationId"", ""ProductVersion"")
-VALUES (@migrationId, @productVersion);";
+VALUES (@migrationId, @productVersion)
+ON CONFLICT (""MigrationId"") DO NOTHING;";
 
-        var insertMigrationIdParameter = insertInitialMigrationCommand.CreateParameter();
-        insertMigrationIdParameter.ParameterName = "@migrationId";
-        insertMigrationIdParameter.Value = initialMigrationId;
-        insertInitialMigrationCommand.Parameters.Add(insertMigrationIdParameter);
+    AddParameter(command, "@migrationId", migrationId);
+    AddParameter(command, "@productVersion", productVersion);
+    await command.ExecuteNonQueryAsync();
+}
 
-        var productVersionParameter = insertInitialMigrationCommand.CreateParameter();
-        productVersionParameter.ParameterName = "@productVersion";
-        productVersionParameter.Value = initialProductVersion;
-        insertInitialMigrationCommand.Parameters.Add(productVersionParameter);
+static async Task ExecuteNonQueryAsync(System.Data.Common.DbConnection connection, string sql)
+{
+    await using var command = connection.CreateCommand();
+    command.CommandText = sql;
+    await command.ExecuteNonQueryAsync();
+}
 
-        await insertInitialMigrationCommand.ExecuteNonQueryAsync();
-    }
-    finally
-    {
-        await db.Database.CloseConnectionAsync();
-    }
+static void AddParameter(System.Data.Common.DbCommand command, string name, object value)
+{
+    var parameter = command.CreateParameter();
+    parameter.ParameterName = name;
+    parameter.Value = value;
+    command.Parameters.Add(parameter);
 }
