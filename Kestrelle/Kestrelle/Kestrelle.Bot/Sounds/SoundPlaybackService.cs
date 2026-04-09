@@ -64,6 +64,7 @@ public sealed class SoundPlaybackService(
             return (false, "Sound file is missing from storage.", null);
 
         await StopAsync(guildId, CancellationToken.None);
+        await EnsureVoiceMembersCachedAsync(guild, voiceChannel).ConfigureAwait(false);
 
         var cancellation = CancellationTokenSource.CreateLinkedTokenSource(ct);
         logger.LogInformation(
@@ -247,6 +248,48 @@ public sealed class SoundPlaybackService(
         playback.Cancellation.Dispose();
     }
 
+    private async Task EnsureVoiceMembersCachedAsync(SocketGuild guild, SocketVoiceChannel voiceChannel)
+    {
+        var connectedUserIds = voiceChannel.ConnectedUsers
+            .Select(user => user.Id)
+            .Distinct()
+            .ToArray();
+
+        if (connectedUserIds.Length == 0)
+            return;
+
+        var unresolvedUserIds = connectedUserIds
+            .Where(userId => guild.GetUser(userId) is null)
+            .ToArray();
+
+        if (unresolvedUserIds.Length == 0)
+            return;
+
+        logger.LogInformation(
+            "Downloading guild members before starting sound playback in guild {GuildId}. Voice channel {ChannelId} has {ConnectedUserCount} connected users. Guild cache synced={IsSynced} hasAllMembers={HasAllMembers}.",
+            guild.Id,
+            voiceChannel.Id,
+            connectedUserIds.Length,
+            guild.IsSynced,
+            guild.HasAllMembers);
+
+        await guild.DownloadUsersAsync().ConfigureAwait(false);
+
+        unresolvedUserIds = connectedUserIds
+            .Where(userId => guild.GetUser(userId) is null)
+            .ToArray();
+
+        if (unresolvedUserIds.Length > 0)
+        {
+            logger.LogWarning(
+                "Sound playback is starting with {MissingUserCount} unresolved voice members in guild {GuildId} channel {ChannelId}. Unresolved user IDs: {UserIds}. If sound is still silent, enable the Server Members intent for the sound bot so DAVE can validate all voice participants.",
+                unresolvedUserIds.Length,
+                guild.Id,
+                voiceChannel.Id,
+                string.Join(", ", unresolvedUserIds));
+        }
+    }
+
     private Process CreateFfmpegProcess(string filePath)
     {
         return new Process
@@ -290,4 +333,3 @@ public sealed class SoundPlaybackService(
         public Task? Execution { get; set; }
     }
 }
-

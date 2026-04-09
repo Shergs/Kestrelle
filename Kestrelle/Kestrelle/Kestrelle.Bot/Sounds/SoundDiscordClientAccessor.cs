@@ -13,7 +13,9 @@ public sealed class SoundDiscordClientAccessor
 
         Client = new DiscordSocketClient(new DiscordSocketConfig
         {
-            GatewayIntents = GatewayIntents.Guilds | GatewayIntents.GuildVoiceStates,
+            GatewayIntents = GatewayIntents.Guilds | GatewayIntents.GuildVoiceStates | GatewayIntents.GuildMembers,
+            AlwaysDownloadUsers = true,
+            LargeThreshold = 250,
             EnableVoiceDaveEncryption = true,
         });
     }
