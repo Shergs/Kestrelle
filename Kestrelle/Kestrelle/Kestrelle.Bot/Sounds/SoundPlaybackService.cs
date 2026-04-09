@@ -20,6 +20,7 @@ public sealed class SoundPlaybackService(
     ILogger<SoundPlaybackService> logger)
 {
     private readonly ConcurrentDictionary<ulong, ActivePlayback> _playbacks = new();
+    private readonly ConcurrentDictionary<ulong, SemaphoreSlim> _guildLocks = new();
     private readonly string _rootPath = ResolveRootPath(storageOptions.Value.RootPath);
     private readonly DiscordSocketClient _client = clientAccessor.Client;
 
@@ -30,80 +31,100 @@ public sealed class SoundPlaybackService(
         string? requestedBy,
         CancellationToken ct)
     {
-        Sound? sound;
+        var guildLock = GetGuildLock(guildId);
+        await guildLock.WaitAsync(ct).ConfigureAwait(false);
 
-        await using (var scope = scopeFactory.CreateAsyncScope())
+        try
         {
-            var db = scope.ServiceProvider.GetRequiredService<KestrelleDbContext>();
-            sound = await db.Sounds.AsNoTracking().FirstOrDefaultAsync(x => x.Id == soundId && x.GuildId == guildId, ct);
+            Sound? sound;
+
+            await using (var scope = scopeFactory.CreateAsyncScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<KestrelleDbContext>();
+                sound = await db.Sounds.AsNoTracking().FirstOrDefaultAsync(x => x.Id == soundId && x.GuildId == guildId, ct);
+            }
+
+            if (sound is null)
+                return (false, "Sound not found.", null);
+
+            if (sound.StorageProvider is not SoundStorageProvider.LocalDisk)
+                return (false, "Only locally stored sounds are supported right now.", null);
+
+            var guild = _client.GetGuild(guildId);
+            if (guild is null)
+                return (false, "Sound bot is not connected to that guild.", null);
+
+            var voiceChannel = guild.GetVoiceChannel(voiceChannelId);
+            if (voiceChannel is null)
+                return (false, "Voice channel not found.", null);
+
+            var permissions = guild.CurrentUser.GetPermissions(voiceChannel);
+            if (!permissions.Connect)
+                return (false, "Sound bot does not have permission to connect to that voice channel.", null);
+
+            if (!permissions.Speak)
+                return (false, "Sound bot does not have permission to speak in that voice channel.", null);
+
+            var filePath = ResolveAbsolutePath(sound.StorageKey);
+            if (!File.Exists(filePath))
+                return (false, "Sound file is missing from storage.", null);
+
+            await StopActivePlaybackAsync(guildId).ConfigureAwait(false);
+
+            var cancellation = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            logger.LogInformation(
+                "Connecting sound bot to guild {GuildId} channel {ChannelId} for sound {SoundId} ({DisplayName}) requested by {User}. File: {FilePath}",
+                guildId,
+                voiceChannelId,
+                sound.Id,
+                sound.DisplayName,
+                requestedBy ?? "unknown",
+                filePath);
+
+            var audioClient = await voiceChannel.ConnectAsync(selfDeaf: false, selfMute: false).ConfigureAwait(false);
+            var currentVoiceState = guild.CurrentUser.VoiceState;
+            logger.LogInformation(
+                "Connected sound bot to guild {GuildId}. Voice state={ConnectionState} websocket latency={Latency} udp latency={UdpLatency} currentChannel={CurrentChannelId} muted={IsMuted} deafened={IsDeafened}",
+                guildId,
+                audioClient.ConnectionState,
+                audioClient.Latency,
+                audioClient.UdpLatency,
+                currentVoiceState?.VoiceChannel?.Id,
+                currentVoiceState?.IsMuted,
+                currentVoiceState?.IsDeafened);
+
+            var playback = new ActivePlayback(audioClient, cancellation);
+            _playbacks[guildId] = playback;
+
+            playback.Execution = RunPlaybackAsync(guildId, playback, sound, filePath, cancellation.Token);
+            _ = WatchPlaybackAsync(guildId, playback);
+
+            return (true, $"Playing {sound.DisplayName}.", sound.DisplayName);
         }
-
-        if (sound is null)
-            return (false, "Sound not found.", null);
-
-        if (sound.StorageProvider is not SoundStorageProvider.LocalDisk)
-            return (false, "Only locally stored sounds are supported right now.", null);
-
-        var guild = _client.GetGuild(guildId);
-        if (guild is null)
-            return (false, "Sound bot is not connected to that guild.", null);
-
-        var voiceChannel = guild.GetVoiceChannel(voiceChannelId);
-        if (voiceChannel is null)
-            return (false, "Voice channel not found.", null);
-
-        var permissions = guild.CurrentUser.GetPermissions(voiceChannel);
-        if (!permissions.Connect)
-            return (false, "Sound bot does not have permission to connect to that voice channel.", null);
-
-        if (!permissions.Speak)
-            return (false, "Sound bot does not have permission to speak in that voice channel.", null);
-
-        var filePath = ResolveAbsolutePath(sound.StorageKey);
-        if (!File.Exists(filePath))
-            return (false, "Sound file is missing from storage.", null);
-
-        await StopAsync(guildId, CancellationToken.None);
-
-        var cancellation = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        logger.LogInformation(
-            "Connecting sound bot to guild {GuildId} channel {ChannelId} for sound {SoundId} ({DisplayName}) requested by {User}. File: {FilePath}",
-            guildId,
-            voiceChannelId,
-            sound.Id,
-            sound.DisplayName,
-            requestedBy ?? "unknown",
-            filePath);
-
-        var audioClient = await voiceChannel.ConnectAsync(selfDeaf: false, selfMute: false);
-        var currentVoiceState = guild.CurrentUser.VoiceState;
-        logger.LogInformation(
-            "Connected sound bot to guild {GuildId}. Voice state={ConnectionState} websocket latency={Latency} udp latency={UdpLatency} currentChannel={CurrentChannelId} muted={IsMuted} deafened={IsDeafened}",
-            guildId,
-            audioClient.ConnectionState,
-            audioClient.Latency,
-            audioClient.UdpLatency,
-            currentVoiceState?.VoiceChannel?.Id,
-            currentVoiceState?.IsMuted,
-            currentVoiceState?.IsDeafened);
-
-        var playback = new ActivePlayback(audioClient, cancellation);
-        _playbacks[guildId] = playback;
-
-        playback.Execution = RunPlaybackAsync(guildId, playback, sound, filePath, cancellation.Token);
-        _ = WatchPlaybackAsync(guildId, playback);
-
-        return (true, $"Playing {sound.DisplayName}.", sound.DisplayName);
+        finally
+        {
+            guildLock.Release();
+        }
     }
 
     public async Task<(bool Success, string Message)> StopAsync(ulong guildId, CancellationToken ct)
     {
-        if (!_playbacks.TryRemove(guildId, out var playback))
-            return (false, "No sound is currently playing.");
+        var guildLock = GetGuildLock(guildId);
+        await guildLock.WaitAsync(ct).ConfigureAwait(false);
 
-        logger.LogInformation("Stopping sound playback in guild {GuildId}.", guildId);
-        await CleanupPlaybackAsync(playback).ConfigureAwait(false);
-        return (true, "Stopped sound playback.");
+        try
+        {
+            if (!_playbacks.TryRemove(guildId, out var playback))
+                return (false, "No sound is currently playing.");
+
+            logger.LogInformation("Stopping sound playback in guild {GuildId}.", guildId);
+            await CleanupPlaybackAsync(guildId, playback).ConfigureAwait(false);
+            return (true, "Stopped sound playback.");
+        }
+        finally
+        {
+            guildLock.Release();
+        }
     }
 
     private async Task WatchPlaybackAsync(ulong guildId, ActivePlayback playback)
@@ -122,10 +143,20 @@ public sealed class SoundPlaybackService(
         }
         finally
         {
-            if (_playbacks.TryGetValue(guildId, out var current) && ReferenceEquals(current, playback))
-                _playbacks.TryRemove(guildId, out _);
+            var guildLock = GetGuildLock(guildId);
+            await guildLock.WaitAsync().ConfigureAwait(false);
 
-            await CleanupPlaybackAsync(playback).ConfigureAwait(false);
+            try
+            {
+                if (_playbacks.TryGetValue(guildId, out var current) && ReferenceEquals(current, playback))
+                    _playbacks.TryRemove(guildId, out _);
+
+                await CleanupPlaybackAsync(guildId, playback).ConfigureAwait(false);
+            }
+            finally
+            {
+                guildLock.Release();
+            }
         }
     }
 
@@ -224,8 +255,20 @@ public sealed class SoundPlaybackService(
         }
     }
 
-    private async Task CleanupPlaybackAsync(ActivePlayback playback)
+    private async Task StopActivePlaybackAsync(ulong guildId)
     {
+        if (!_playbacks.TryRemove(guildId, out var playback))
+            return;
+
+        logger.LogInformation("Stopping existing sound playback in guild {GuildId} before starting a new one.", guildId);
+        await CleanupPlaybackAsync(guildId, playback).ConfigureAwait(false);
+    }
+
+    private async Task CleanupPlaybackAsync(ulong guildId, ActivePlayback playback)
+    {
+        if (Interlocked.Exchange(ref playback.CleanupStarted, 1) == 1)
+            return;
+
         try
         {
             if (!playback.Cancellation.IsCancellationRequested)
@@ -238,14 +281,18 @@ public sealed class SoundPlaybackService(
         try
         {
             await playback.AudioClient.StopAsync().ConfigureAwait(false);
+            logger.LogInformation("Sound audio client stopped for guild {GuildId}.", guildId);
         }
         catch (Exception ex)
         {
-            logger.LogDebug(ex, "Sound audio client stop failed.");
+            logger.LogDebug(ex, "Sound audio client stop failed for guild {GuildId}.", guildId);
         }
 
         playback.Cancellation.Dispose();
     }
+
+    private SemaphoreSlim GetGuildLock(ulong guildId)
+        => _guildLocks.GetOrAdd(guildId, static _ => new SemaphoreSlim(1, 1));
 
     private Process CreateFfmpegProcess(string filePath)
     {
@@ -288,6 +335,6 @@ public sealed class SoundPlaybackService(
         public IAudioClient AudioClient { get; } = audioClient;
         public CancellationTokenSource Cancellation { get; } = cancellation;
         public Task? Execution { get; set; }
+        public int CleanupStarted;
     }
 }
-
