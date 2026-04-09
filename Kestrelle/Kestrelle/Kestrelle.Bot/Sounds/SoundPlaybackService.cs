@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Reflection;
 using Discord.Audio;
 using Discord.WebSocket;
 using Kestrelle.Models.Data;
@@ -19,6 +20,7 @@ public sealed class SoundPlaybackService(
     IOptions<SoundStorageOptions> storageOptions,
     ILogger<SoundPlaybackService> logger)
 {
+    private const BindingFlags InstanceBindingFlags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
     private static readonly TimeSpan VoiceHandshakeDelay = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan PostPlaybackLinger = TimeSpan.FromMilliseconds(750);
 
@@ -80,6 +82,7 @@ public sealed class SoundPlaybackService(
             filePath);
 
         var audioClient = await voiceChannel.ConnectAsync(selfDeaf: false, selfMute: false);
+        PrimeDaveSelfIdentity(audioClient, guild.Id, guild.CurrentUser.Id);
         var currentVoiceState = guild.CurrentUser.VoiceState;
         logger.LogInformation(
             "Connected sound bot to guild {GuildId}. Voice state={ConnectionState} websocket latency={Latency} udp latency={UdpLatency} currentChannel={CurrentChannelId} muted={IsMuted} deafened={IsDeafened}",
@@ -264,6 +267,58 @@ public sealed class SoundPlaybackService(
         playback.Cancellation.Dispose();
     }
 
+    private void PrimeDaveSelfIdentity(IAudioClient audioClient, ulong guildId, ulong selfUserId)
+    {
+        try
+        {
+            var audioClientType = audioClient.GetType();
+            var daveField = audioClientType.GetField("_dave", InstanceBindingFlags);
+
+            if (daveField?.GetValue(audioClient) is not object daveManager)
+            {
+                logger.LogWarning(
+                    "Sound playback could not find Discord.Net's internal DAVE session manager for guild {GuildId}. The self-identity workaround did not run.",
+                    guildId);
+                return;
+            }
+
+            var getOrCreateDecryptor = daveManager.GetType()
+                .GetMethods(InstanceBindingFlags)
+                .FirstOrDefault(method =>
+                    string.Equals(method.Name, "GetOrCreateDecryptor", StringComparison.Ordinal) &&
+                    method.GetParameters() is [{ ParameterType: not null } parameters] &&
+                    parameters.ParameterType == typeof(ulong));
+
+            if (getOrCreateDecryptor is null)
+            {
+                logger.LogWarning(
+                    "Sound playback could not find Discord.Net's GetOrCreateDecryptor method for guild {GuildId}. The self-identity workaround did not run.",
+                    guildId);
+                return;
+            }
+
+            getOrCreateDecryptor.Invoke(daveManager, [selfUserId]);
+            logger.LogInformation(
+                "Primed Discord.Net's DAVE decryptor roster with the sound bot's own user ID {UserId} for guild {GuildId}.",
+                selfUserId,
+                guildId);
+        }
+        catch (TargetInvocationException ex) when (ex.InnerException is not null)
+        {
+            logger.LogWarning(
+                ex.InnerException,
+                "Priming Discord.Net's DAVE self identity failed for guild {GuildId}.",
+                guildId);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(
+                ex,
+                "Priming Discord.Net's DAVE self identity failed for guild {GuildId}.",
+                guildId);
+        }
+    }
+
     private async Task EnsureVoiceMembersCachedAsync(SocketGuild guild, SocketVoiceChannel voiceChannel)
     {
         var connectedUserIds = voiceChannel.ConnectedUsers
@@ -349,3 +404,6 @@ public sealed class SoundPlaybackService(
         public Task? Execution { get; set; }
     }
 }
+
+
+
