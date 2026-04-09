@@ -19,6 +19,9 @@ public sealed class SoundPlaybackService(
     IOptions<SoundStorageOptions> storageOptions,
     ILogger<SoundPlaybackService> logger)
 {
+    private static readonly TimeSpan VoiceHandshakeDelay = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan PostPlaybackLinger = TimeSpan.FromMilliseconds(750);
+
     private readonly ConcurrentDictionary<ulong, ActivePlayback> _playbacks = new();
     private readonly string _rootPath = ResolveRootPath(storageOptions.Value.RootPath);
     private readonly DiscordSocketClient _client = clientAccessor.Client;
@@ -132,6 +135,14 @@ public sealed class SoundPlaybackService(
 
     private async Task RunPlaybackAsync(ulong guildId, ActivePlayback playback, Sound sound, string filePath, CancellationToken ct)
     {
+        logger.LogInformation(
+            "Waiting {HandshakeDelayMs}ms for the voice/DAVE session to settle before streaming sound {SoundId} in guild {GuildId}.",
+            (int)VoiceHandshakeDelay.TotalMilliseconds,
+            sound.Id,
+            guildId);
+
+        await Task.Delay(VoiceHandshakeDelay, ct).ConfigureAwait(false);
+
         using var ffmpeg = CreateFfmpegProcess(filePath);
         ffmpeg.Start();
 
@@ -155,7 +166,6 @@ public sealed class SoundPlaybackService(
 
         try
         {
-            await Task.Delay(TimeSpan.FromMilliseconds(500), ct).ConfigureAwait(false);
             await playback.AudioClient.SetSpeakingAsync(true).ConfigureAwait(false);
             await using var discordStream = playback.AudioClient.CreatePCMStream(AudioApplication.Mixed, bitrate: 128_000, bufferMillis: 1000, packetLoss: 30);
 
@@ -173,6 +183,12 @@ public sealed class SoundPlaybackService(
             }
 
             await discordStream.FlushAsync(ct).ConfigureAwait(false);
+            logger.LogInformation(
+                "PCM stream flushed for sound {SoundId} in guild {GuildId}. Lingering {LingerMs}ms before disconnect so buffered voice frames can drain.",
+                sound.Id,
+                guildId,
+                (int)PostPlaybackLinger.TotalMilliseconds);
+            await Task.Delay(PostPlaybackLinger, ct).ConfigureAwait(false);
             await ffmpeg.WaitForExitAsync(ct).ConfigureAwait(false);
 
             var ffmpegError = await stderrTask.ConfigureAwait(false);
